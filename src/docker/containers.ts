@@ -1,4 +1,6 @@
 import { getDockerClient } from './client';
+import { triggerAlert } from '../monitor/alerts';
+import { logger } from '../utils/logger';
 
 export interface ContainerData {
   id: string;
@@ -11,15 +13,46 @@ export interface ContainerData {
 export const getRunningContainers = async (): Promise<ContainerData[]> => {
   const docker = getDockerClient();
   try {
-    const containers = await docker.listContainers();
-    return containers.map((c) => ({
-      id: c.Id.substring(0, 12),
-      name: c.Names[0]?.replace('/', '') || 'Unknown',
-      image: c.Image,
-      state: c.State,
-      status: c.Status,
-    }));
+    // Try to list containers, use a timeout if possible or just catch common connection errors
+    const containers = await docker.listContainers({ all: true });
+    
+    return containers.map((c) => {
+      const name = c.Names[0]?.replace('/', '') || 'Unknown';
+      const id = c.Id.substring(0, 12);
+
+      // Check for failures (non-blocking alerts)
+      if (c.State === 'restarting') {
+        triggerAlert({
+          id: `container:${name}:restarting`,
+          type: 'container',
+          severity: 'warning',
+          message: `Docker container ${name} (${id}) is restarting.`,
+        });
+      } else if (c.State === 'exited') {
+        const match = c.Status.match(/Exited \((\d+)\)/);
+        const exitCode = match ? parseInt(match[1], 10) : 0;
+        
+        if (exitCode !== 0) {
+          triggerAlert({
+            id: `container:${name}:failure`,
+            type: 'container',
+            severity: 'critical',
+            message: `Docker container ${name} (${id}) exited with code ${exitCode}.`,
+          });
+        }
+      }
+
+      return {
+        id,
+        name,
+        image: c.Image,
+        state: c.State,
+        status: c.Status,
+      };
+    });
   } catch (error) {
-    return [];
+    logger.error(`Failed to fetch Docker containers: ${(error as Error).message}`);
+    // Throw error so UI can handle it instead of showing empty list
+    throw error;
   }
 };

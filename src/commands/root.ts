@@ -7,6 +7,7 @@ import { registerShowCommand } from './show';
 import { registerHealthCommand } from './health';
 import { registerWatchCommand } from './watch';
 import { registerLogsCommand } from './logs';
+import { registerConfigCommand } from './config';
 import { logger } from '../utils/logger';
 import { showWelcomeBanner } from '../ui/banner';
 
@@ -20,6 +21,7 @@ registerShowCommand(program);
 registerHealthCommand(program);
 registerWatchCommand(program);
 registerLogsCommand(program);
+registerConfigCommand(program);
 
 const run = async () => {
   if (!process.argv.slice(2).length) {
@@ -31,20 +33,30 @@ const run = async () => {
       checkMinikubeConnection()
     ]);
 
-    const dockerStr = dockerStatus.connected ? chalk.green('Connected') : chalk.red('Disconnected');
-    const k8sStr = k8sStatus.connected ? chalk.green('Connected') : chalk.red('Disconnected');
+    const badge = (text: string, color: 'green' | 'red' | 'yellow') => {
+      const styles = {
+        green: chalk.bgGreen.black.bold,
+        red: chalk.bgRed.white.bold,
+        yellow: chalk.bgYellow.black.bold,
+      };
+      return styles[color](` ${text} `);
+    };
+
+    const dockerStr = dockerStatus.connected ? badge('CONNECTED', 'green') : badge('DISCONNECTED', 'red');
+    const k8sStr = k8sStatus.connected ? badge('CONNECTED', 'green') : badge('DISCONNECTED', 'red');
     
-    let minikubeStr = chalk.red('Not Installed');
+    let minikubeStr = badge('NOT INSTALLED', 'red');
     if (minikubeStatus.installed) {
-      minikubeStr = minikubeStatus.running ? chalk.green('Running') : chalk.yellow('Stopped');
+      minikubeStr = minikubeStatus.running ? badge('RUNNING', 'green') : badge('STOPPED', 'yellow');
     }
 
-    console.log(`Docker: ${dockerStr}`);
-    console.log(`Kubernetes: ${k8sStr}`);
-    console.log(`Minikube: ${minikubeStr}\n`);
-    console.log(`Running Containers: ${chalk.yellow(dockerStatus.containerCount)}`);
-    console.log(`Running Pods: ${chalk.yellow(k8sStatus.podCount)}`);
-    console.log(`Unhealthy Services: ${chalk.yellow('0')} (Mocked)\n`);
+    console.log(`${chalk.bold('Docker:')}      ${dockerStr}`);
+    console.log(`${chalk.bold('Kubernetes:')}  ${k8sStr}`);
+    console.log(`${chalk.bold('Minikube:')}    ${minikubeStr}\n`);
+    
+    console.log(`${chalk.cyan('󰡨')} Running Containers: ${chalk.yellow.bold(dockerStatus.containerCount)}`);
+    console.log(`${chalk.blue('󱔎')} Running Pods:       ${chalk.yellow.bold(k8sStatus.podCount)}`);
+    console.log(`${chalk.red('󰒑')} Unhealthy Services: ${chalk.yellow.bold('0')} (Mocked)\n`);
     console.log(chalk.bold('Commands:\n'));
     console.log(`  kdm show runners\n  kdm health all\n  kdm watch\n  kdm logs <name>\n`);
     
