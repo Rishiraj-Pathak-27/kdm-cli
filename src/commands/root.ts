@@ -14,7 +14,7 @@ import { showWelcomeBanner } from '../ui/banner';
 program
   .name('kdm')
   .description('Kubernetes and Docker Monitoring CLI')
-  .version('0.9.9');
+  .version('1.1.0');
 
 // Register modular commands
 registerShowCommand(program);
@@ -25,7 +25,7 @@ registerConfigCommand(program);
 
 const run = async () => {
   if (!process.argv.slice(2).length) {
-    showWelcomeBanner('0.9.9');
+    showWelcomeBanner('1.1.0');
 
     const [dockerStatus, k8sStatus, minikubeStatus] = await Promise.all([
       checkDockerConnection(),
