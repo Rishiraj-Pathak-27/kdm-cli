@@ -6,12 +6,12 @@
   "main": "dist/index.js",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/utkarsh232005/KDM-Cli.git"
+    "url": "git+https://github.com/KDM-cli/kdm-cli"
   },
   "bugs": {
-    "url": "https://github.com/utkarsh232005/KDM-Cli/issues"
+    "url": "https://github.com/KDM-cli/kdm-cli/issues"
   },
-  "homepage": "https://github.com/utkarsh232005/KDM-Cli#readme",
+  "homepage": "https://github.com/KDM-cli/kdm-cli#readme",
   "bin": {
     "kdm": "./bin/kdm.js"
   },
