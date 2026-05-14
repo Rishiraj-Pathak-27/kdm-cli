@@ -3,6 +3,7 @@ import { getRunningContainers } from '../docker/containers';
 import { getRunningPods } from '../kubernetes/pods';
 import { logger } from '../utils/logger';
 import { showRunners, showPods } from '../commands/show';
+import { createSpinner } from '../ui/spinner';
 import * as tableUtils from '../ui/table';
 
 // Mock dependencies
@@ -47,6 +48,13 @@ describe('show command runners', () => {
 
     // Verify: Warning was logged for Kubernetes, but no crash
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Kubernetes is unreachable'));
+    
+    // Verify spinner lifecycle
+    expect(createSpinner).toHaveBeenCalled();
+    const spinnerInstance = vi.mocked(createSpinner).mock.results[0].value;
+    expect(spinnerInstance.start).toHaveBeenCalled();
+    expect(spinnerInstance.warn).toHaveBeenCalledWith(expect.stringContaining('Some runners could not be fetched'));
+    
     // Verify: Table still rendered with Docker data
     expect(tableUtils.renderTable).toHaveBeenCalled();
   });
@@ -60,6 +68,10 @@ describe('show command runners', () => {
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Docker is unreachable'));
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Kubernetes is unreachable'));
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No running containers or pods found'));
+
+    // Verify spinner lifecycle
+    const spinnerInstance = vi.mocked(createSpinner).mock.results[0].value;
+    expect(spinnerInstance.warn).toHaveBeenCalledWith(expect.stringContaining('Some runners could not be fetched'));
   });
 
   it('should handle Kubernetes connection failure gracefully in showPods', async () => {
@@ -67,5 +79,9 @@ describe('show command runners', () => {
 
     // Should not throw
     await expect(showPods()).resolves.not.toThrow();
+
+    // Verify spinner lifecycle
+    const spinnerInstance = vi.mocked(createSpinner).mock.results[0].value;
+    expect(spinnerInstance.fail).toHaveBeenCalledWith(expect.stringContaining('Failed to fetch Kubernetes pods'));
   });
 });
