@@ -29,6 +29,7 @@ const run = async () => {
     showWelcomeBanner('1.1.0');
 
     const spinner = createSpinner('Checking connections...').start();
+    let hadError = false;
     try {
       const [dockerStatus, k8sStatus, minikubeStatus] = await Promise.all([
         checkDockerConnection(),
@@ -65,10 +66,11 @@ const run = async () => {
       console.log(chalk.bold('Commands:\n'));
       console.log(`  kdm show runners\n  kdm health all\n  kdm watch\n  kdm logs <name>\n`);
     } catch (error) {
+      hadError = true;
       spinner.fail(`Connection check failed: ${(error as Error).message}`);
     } finally {
       program.outputHelp();
-      process.exit(0);
+      process.exit(hadError ? 1 : 0);
     }
   }
 
