@@ -1,9 +1,9 @@
-import ora from 'ora';
+import { Spinner } from '@vr_patel/tui';
 
 export const createSpinner = (text: string) => {
-  return ora({
+  const spinner = new Spinner({
     text,
-    color: 'cyan',
-    spinner: 'dots',
+    style: 'dots',
   });
+  return spinner;
 };

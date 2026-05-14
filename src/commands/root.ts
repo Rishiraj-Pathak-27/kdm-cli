@@ -10,6 +10,7 @@ import { registerLogsCommand } from './logs';
 import { registerConfigCommand } from './config';
 import { logger } from '../utils/logger';
 import { showWelcomeBanner } from '../ui/banner';
+import { createSpinner } from '../ui/spinner';
 
 program
   .name('kdm')
@@ -27,41 +28,48 @@ const run = async () => {
   if (!process.argv.slice(2).length) {
     showWelcomeBanner('1.1.0');
 
-    const [dockerStatus, k8sStatus, minikubeStatus] = await Promise.all([
-      checkDockerConnection(),
-      checkK8sConnection(),
-      checkMinikubeConnection()
-    ]);
+    const spinner = createSpinner('Checking connections...').start();
+    try {
+      const [dockerStatus, k8sStatus, minikubeStatus] = await Promise.all([
+        checkDockerConnection(),
+        checkK8sConnection(),
+        checkMinikubeConnection()
+      ]);
+      spinner.stop('Connection check complete');
+      console.log();
 
-    const badge = (text: string, color: 'green' | 'red' | 'yellow') => {
-      const styles = {
-        green: chalk.bgGreen.black.bold,
-        red: chalk.bgRed.white.bold,
-        yellow: chalk.bgYellow.black.bold,
+      const badge = (text: string, color: 'green' | 'red' | 'yellow') => {
+        const styles = {
+          green: chalk.bgGreen.black.bold,
+          red: chalk.bgRed.white.bold,
+          yellow: chalk.bgYellow.black.bold,
+        };
+        return styles[color](` ${text} `);
       };
-      return styles[color](` ${text} `);
-    };
 
-    const dockerStr = dockerStatus.connected ? badge('CONNECTED', 'green') : badge('DISCONNECTED', 'red');
-    const k8sStr = k8sStatus.connected ? badge('CONNECTED', 'green') : badge('DISCONNECTED', 'red');
-    
-    let minikubeStr = badge('NOT INSTALLED', 'red');
-    if (minikubeStatus.installed) {
-      minikubeStr = minikubeStatus.running ? badge('RUNNING', 'green') : badge('STOPPED', 'yellow');
+      const dockerStr = dockerStatus.connected ? badge('CONNECTED', 'green') : badge('DISCONNECTED', 'red');
+      const k8sStr = k8sStatus.connected ? badge('CONNECTED', 'green') : badge('DISCONNECTED', 'red');
+      
+      let minikubeStr = badge('NOT INSTALLED', 'red');
+      if (minikubeStatus.installed) {
+        minikubeStr = minikubeStatus.running ? badge('RUNNING', 'green') : badge('STOPPED', 'yellow');
+      }
+
+      console.log(`${chalk.bold('Docker:')}      ${dockerStr}`);
+      console.log(`${chalk.bold('Kubernetes:')}  ${k8sStr}`);
+      console.log(`${chalk.bold('Minikube:')}    ${minikubeStr}\n`);
+      
+      console.log(`${chalk.cyan('󰡨')} Running Containers: ${chalk.yellow.bold(dockerStatus.containerCount)}`);
+      console.log(`${chalk.blue('󱔎')} Running Pods:       ${chalk.yellow.bold(k8sStatus.podCount)}`);
+      console.log(`${chalk.red('󰒑')} Unhealthy Services: ${chalk.yellow.bold('0')} (Mocked)\n`);
+      console.log(chalk.bold('Commands:\n'));
+      console.log(`  kdm show runners\n  kdm health all\n  kdm watch\n  kdm logs <name>\n`);
+    } catch (error) {
+      spinner.fail(`Connection check failed: ${(error as Error).message}`);
+    } finally {
+      program.outputHelp();
+      process.exit(0);
     }
-
-    console.log(`${chalk.bold('Docker:')}      ${dockerStr}`);
-    console.log(`${chalk.bold('Kubernetes:')}  ${k8sStr}`);
-    console.log(`${chalk.bold('Minikube:')}    ${minikubeStr}\n`);
-    
-    console.log(`${chalk.cyan('󰡨')} Running Containers: ${chalk.yellow.bold(dockerStatus.containerCount)}`);
-    console.log(`${chalk.blue('󱔎')} Running Pods:       ${chalk.yellow.bold(k8sStatus.podCount)}`);
-    console.log(`${chalk.red('󰒑')} Unhealthy Services: ${chalk.yellow.bold('0')} (Mocked)\n`);
-    console.log(chalk.bold('Commands:\n'));
-    console.log(`  kdm show runners\n  kdm health all\n  kdm watch\n  kdm logs <name>\n`);
-    
-    program.outputHelp();
-    process.exit(0);
   }
 
   program.parse(process.argv);

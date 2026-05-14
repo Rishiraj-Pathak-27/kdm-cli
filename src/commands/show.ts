@@ -30,7 +30,7 @@ export const showContainers = async () => {
   const spinner = createSpinner('Fetching Docker containers...').start();
   try {
     const containers = await getRunningContainers();
-    spinner.stop();
+    spinner.stop('Docker containers fetched successfully');
 
     if (containers.length === 0) {
       logger.warn('No running Docker containers found.');
@@ -48,7 +48,7 @@ export const showContainers = async () => {
       ]),
     });
   } catch (error) {
-    spinner.stop();
+    spinner.fail('Failed to fetch Docker containers');
     // Error is already logged by getRunningContainers
   }
 };
@@ -57,7 +57,7 @@ export const showPods = async () => {
   const spinner = createSpinner('Fetching Kubernetes pods...').start();
   try {
     const pods = await getRunningPods();
-    spinner.stop();
+    spinner.stop('Kubernetes pods fetched successfully');
 
     if (pods.length === 0) {
       logger.warn('No running Kubernetes pods found.');
@@ -75,7 +75,7 @@ export const showPods = async () => {
       ]),
     });
   } catch (error) {
-    spinner.stop();
+    spinner.fail('Failed to fetch Kubernetes pods');
     // Error is already logged by getRunningPods
   }
 };
@@ -88,7 +88,12 @@ export const showRunners = async () => {
     getRunningPods()
   ]);
   
-  spinner.stop();
+  const anyFailed = containerRes.status === 'rejected' || podRes.status === 'rejected';
+  if (anyFailed) {
+    spinner.warn('Some runners could not be fetched');
+  } else {
+    spinner.stop('Runners fetched successfully');
+  }
 
   const containers = containerRes.status === 'fulfilled' ? containerRes.value : [];
   const pods = podRes.status === 'fulfilled' ? podRes.value : [];
@@ -128,29 +133,32 @@ export const showRunners = async () => {
 
 const showMinikube = async () => {
   const spinner = createSpinner('Fetching Minikube status...').start();
-  const conn = await checkMinikubeConnection();
-  if (!conn.installed) {
-    spinner.stop();
-    logger.warn('Minikube is not installed on this system.');
-    return;
-  }
-  
-  const statusList = await getMinikubeStatus();
-  spinner.stop();
+  try {
+    const conn = await checkMinikubeConnection();
+    if (!conn.installed) {
+      spinner.fail('Minikube is not installed on this system');
+      return;
+    }
+    
+    const statusList = await getMinikubeStatus();
+    spinner.stop('Minikube status fetched successfully');
 
-  if (statusList.length === 0) {
-    logger.warn('No Minikube profiles found or status is unknown.');
-    return;
-  }
+    if (statusList.length === 0) {
+      logger.warn('No Minikube profiles found or status is unknown.');
+      return;
+    }
 
-  renderTable({
-    head: ['NAME', 'HOST', 'KUBELET', 'APISERVER', 'MESSAGE'],
-    rows: statusList.map((s) => [
-      s.Name || '-',
-      s.Host === 'Running' ? chalk.green(s.Host) : (s.Host === 'Stopped' ? chalk.red(s.Host) : chalk.yellow(s.Host || '-')),
-      s.Kubelet === 'Running' ? chalk.green(s.Kubelet) : chalk.yellow(s.Kubelet || '-'),
-      s.APIServer === 'Running' ? chalk.green(s.APIServer) : chalk.yellow(s.APIServer || '-'),
-      s.Message || '-',
-    ]),
-  });
+    renderTable({
+      head: ['NAME', 'HOST', 'KUBELET', 'APISERVER', 'MESSAGE'],
+      rows: statusList.map((s) => [
+        s.Name || '-',
+        s.Host === 'Running' ? chalk.green(s.Host) : (s.Host === 'Stopped' ? chalk.red(s.Host) : chalk.yellow(s.Host || '-')),
+        s.Kubelet === 'Running' ? chalk.green(s.Kubelet) : chalk.yellow(s.Kubelet || '-'),
+        s.APIServer === 'Running' ? chalk.green(s.APIServer) : chalk.yellow(s.APIServer || '-'),
+        s.Message || '-',
+      ]),
+    });
+  } catch (error) {
+    spinner.fail(`Failed to fetch Minikube status: ${(error as Error).message}`);
+  }
 };
