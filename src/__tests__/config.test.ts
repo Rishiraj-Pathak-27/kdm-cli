@@ -22,6 +22,16 @@ describe('config command', () => {
   let consoleLogSpy: any;
   let consoleErrorSpy: any;
 
+  const consoleLogOrder = (matcher: RegExp | string) => {
+    const callIndex = consoleLogSpy.mock.calls.findIndex(([message]: [string]) =>
+      matcher instanceof RegExp ? matcher.test(message) : message.includes(matcher),
+    );
+    expect(callIndex).toBeGreaterThanOrEqual(0);
+    return consoleLogSpy.mock.invocationCallOrder[callIndex];
+  };
+
+  const firstInputOrder = () => vi.mocked(tui.input).mock.invocationCallOrder[0];
+
   beforeEach(() => {
     vi.clearAllMocks();
     program = new Command();
@@ -64,6 +74,19 @@ describe('config command', () => {
     expect(configUtils.setConfig).toHaveBeenCalledWith('discord_webhook', 'https://discord.com/api/webhooks/123456789/token-here');
     expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringMatching(/Discord webhook setup/i));
     expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('Integrations > Webhooks'));
+
+    const guideOrder = consoleLogOrder(/Discord webhook setup/i);
+    expect(guideOrder).toBeLessThan(firstInputOrder());
+  });
+
+  it('should validate Discord webhook URLs during setup', async () => {
+    vi.mocked(tui.select).mockResolvedValue('discord');
+    vi.mocked(tui.input).mockResolvedValue('https://discord.com/api/webhooks/123456789/token-here');
+
+    await program.parseAsync(['node', 'test', 'config', 'setup']);
+
+    const webhookPrompt = vi.mocked(tui.input).mock.calls[0][0];
+    expect(webhookPrompt.validate('not-a-webhook')).toBe('Must be a valid Discord webhook URL (including ID and Token)');
   });
 
   it('should call select, multiple inputs and setConfig on email setup', async () => {
@@ -83,6 +106,23 @@ describe('config command', () => {
     expect(configUtils.setConfig).toHaveBeenCalledWith('email_to', 'to@test.com');
     expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringMatching(/Email SMTP setup/i));
     expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('KDM_SMTP_PASSWORD'));
+
+    const guideOrder = consoleLogOrder(/Email SMTP setup/i);
+    expect(guideOrder).toBeLessThan(firstInputOrder());
+  });
+
+  it('should require an SMTP host during email setup', async () => {
+    vi.mocked(tui.select).mockResolvedValue('email');
+    vi.mocked(tui.input)
+      .mockResolvedValueOnce('smtp.gmail.com')
+      .mockResolvedValueOnce('587')
+      .mockResolvedValueOnce('user@test.com')
+      .mockResolvedValueOnce('to@test.com');
+
+    await program.parseAsync(['node', 'test', 'config', 'setup']);
+
+    const smtpHostPrompt = vi.mocked(tui.input).mock.calls[0][0];
+    expect(smtpHostPrompt.validate('')).toBe('Host is required');
   });
 
   it('should call setConfig on config set', async () => {
