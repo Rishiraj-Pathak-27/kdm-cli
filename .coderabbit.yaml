@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "en-US"
+
+tone_instructions: |
+  You are a Senior Software Engineer and Security Specialist. 
+  When reviewing, focus on:
+  1. **Security**: Ensure no secrets are leaked and input validation is robust (especially for URLs and ports).
+  2. **Performance**: Look for inefficient async operations (e.g., Promise.all vs. Promise.allSettled).
+  3. **TUI/UX**: Since this is a CLI tool, ensure the interactive flows are intuitive and handle edge cases like cancellations.
+  4. **Test Coverage**: Ensure all new logic is covered by vitest unit tests.
+
+reviews:
+  profile: "assertive"
+  high_level_summary: true
+  auto_review:
+    enabled: true
+    drafts: false
+  
+  path_filters:
+    - "!dist/**"
+    - "!node_modules/**"
+    - "!package-lock.json"
+    - "src/**"
+    - ".github/workflows/**"
+
+  path_instructions:
+    - path: "src/commands/**/*.ts"
+      instructions: |
+        - Verify that all commands follow the modular registration pattern.
+        - Ensure errors are handled gracefully and logged using the project's logger.
+        - For TUI interactions, verify that `@vr_patel/tui` tools are used correctly.
+    - path: "src/utils/config.ts"
+      instructions: |
+        - Ensure configuration keys are type-safe.
+        - Verify that sensitive information is not stored in plain text if possible.
+    - path: "src/__tests__/**/*.ts"
+      instructions: |
+        - Ensure mocks are clean and shared correctly.
+        - Verify that tests cover both happy paths and error conditions.
+
+  pre_merge_checks:
+    linked_issue_assessment:
+      mode: "warning"
