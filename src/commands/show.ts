@@ -26,57 +26,79 @@ export const registerShowCommand = (program: Command) => {
     });
 };
 
-const showContainers = async () => {
+export const showContainers = async () => {
   const spinner = createSpinner('Fetching Docker containers...').start();
-  const containers = await getRunningContainers();
-  spinner.stop();
+  try {
+    const containers = await getRunningContainers();
+    spinner.stop();
 
-  if (containers.length === 0) {
-    logger.warn('No running Docker containers found or Docker is not running.');
-    return;
+    if (containers.length === 0) {
+      logger.warn('No running Docker containers found.');
+      return;
+    }
+
+    renderTable({
+      head: ['CONTAINER ID', 'NAME', 'IMAGE', 'STATUS', 'STATE'],
+      rows: containers.map((c) => [
+        c.id,
+        c.name,
+        c.image.substring(0, 30) + (c.image.length > 30 ? '...' : ''),
+        c.status,
+        c.state === 'running' ? chalk.green(c.state) : chalk.red(c.state),
+      ]),
+    });
+  } catch (error) {
+    spinner.stop();
+    // Error is already logged by getRunningContainers
   }
-
-  renderTable({
-    head: ['CONTAINER ID', 'NAME', 'IMAGE', 'STATUS', 'STATE'],
-    rows: containers.map((c) => [
-      c.id,
-      c.name,
-      c.image.substring(0, 30) + (c.image.length > 30 ? '...' : ''),
-      c.status,
-      c.state === 'running' ? chalk.green(c.state) : chalk.red(c.state),
-    ]),
-  });
 };
 
-const showPods = async () => {
+export const showPods = async () => {
   const spinner = createSpinner('Fetching Kubernetes pods...').start();
-  const pods = await getRunningPods();
-  spinner.stop();
+  try {
+    const pods = await getRunningPods();
+    spinner.stop();
 
-  if (pods.length === 0) {
-    logger.warn('No running Kubernetes pods found or cluster is unreachable.');
-    return;
+    if (pods.length === 0) {
+      logger.warn('No running Kubernetes pods found.');
+      return;
+    }
+
+    renderTable({
+      head: ['POD NAME', 'NAMESPACE', 'STATUS', 'RESTARTS', 'NODE'],
+      rows: pods.map((p) => [
+        p.name,
+        p.namespace,
+        p.status === 'Running' ? chalk.green(p.status) : chalk.yellow(p.status),
+        p.restarts > 0 ? chalk.red(p.restarts) : chalk.green('0'),
+        p.node,
+      ]),
+    });
+  } catch (error) {
+    spinner.stop();
+    // Error is already logged by getRunningPods
   }
-
-  renderTable({
-    head: ['POD NAME', 'NAMESPACE', 'STATUS', 'RESTARTS', 'NODE'],
-    rows: pods.map((p) => [
-      p.name,
-      p.namespace,
-      p.status === 'Running' ? chalk.green(p.status) : chalk.yellow(p.status),
-      p.restarts > 0 ? chalk.red(p.restarts) : chalk.green('0'),
-      p.node,
-    ]),
-  });
 };
 
-const showRunners = async () => {
+export const showRunners = async () => {
   const spinner = createSpinner('Fetching runners (Containers + Pods)...').start();
-  const [containers, pods] = await Promise.all([
+  
+  const [containerRes, podRes] = await Promise.allSettled([
     getRunningContainers(),
     getRunningPods()
   ]);
+  
   spinner.stop();
+
+  const containers = containerRes.status === 'fulfilled' ? containerRes.value : [];
+  const pods = podRes.status === 'fulfilled' ? podRes.value : [];
+
+  if (containerRes.status === 'rejected') {
+    logger.warn('Docker is unreachable, showing only Kubernetes pods (if any).');
+  }
+  if (podRes.status === 'rejected') {
+    logger.warn('Kubernetes is unreachable, showing only Docker containers (if any).');
+  }
 
   if (containers.length === 0 && pods.length === 0) {
     logger.warn('No running containers or pods found.');

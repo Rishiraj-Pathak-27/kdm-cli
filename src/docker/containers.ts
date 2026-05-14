@@ -51,7 +51,8 @@ export const getRunningContainers = async (): Promise<ContainerData[]> => {
       };
     });
   } catch (error) {
-    logger.error(`Failed to fetch Docker containers: ${(error as Error).message}`);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Failed to fetch Docker containers: ${errorMessage}`);
     // Throw error so UI can handle it instead of showing empty list
     throw error;
   }

@@ -54,7 +54,8 @@ export const getRunningPods = async (): Promise<PodData[]> => {
       };
     });
   } catch (error) {
-    logger.error(`Failed to fetch Kubernetes pods: ${(error as Error).message}`);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Failed to fetch Kubernetes pods: ${errorMessage}`);
     throw error;
   }
 };
