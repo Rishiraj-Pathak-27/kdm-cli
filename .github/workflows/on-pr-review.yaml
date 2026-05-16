@@ -25,12 +25,12 @@ jobs:
 
       - name: Save review event
         run: |
-          echo '{"pr_number":${{ github.event.pull_request.number }}, "review_state":"${{ github.event.review.state }}", "draft":${{ github.event.pull_request.draft }}}' > review-event.json
+          echo '{"pr_number":${{ github.event.pull_request.number }}, "review_state":"${{ github.event.review.state }}", "draft":${{ github.event.pull_request.draft }}}' > review-event.cjson
 
       - name: Upload review event
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: review-event-${{ github.run_id }}
-          path: review-event.json
+          path: review-event.cjson
           retention-days: 1
            

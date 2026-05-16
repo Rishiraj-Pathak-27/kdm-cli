@@ -2,7 +2,7 @@ name: Bot - On PR Close
 
 # Runs on PR close (merged). Executes issue recommendation workflow:
 # determines completed issue difficulty, finds next/same/fallback issues,
-# and posts a recommendation comment via bot-on-pr-close.js.
+# and posts a recommendation comment via bot-on-pr-close.cjs.
 on:
   pull_request_target:
     types: [closed]
@@ -36,7 +36,7 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            const script = require('./.github/scripts/bot-on-pr-close.js');
+            const script = require('./.github/scripts/bot-on-pr-close.cjs');
             await script({ github, context });
 
   on-pr-merged-conflict-check:
@@ -57,5 +57,5 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            const script = require('./.github/scripts/bot-on-pr-merged.js');
+            const script = require('./.github/scripts/bot-on-pr-merged.cjs');
             await script({ github, context });

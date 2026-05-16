@@ -2,7 +2,7 @@ name: Bot - On PR Update
 
 # Runs on new commits (synchronize) and PR body edits (edited). Performs all
 # 4 checks (DCO, GPG, merge conflict, issue link), posts/updates unified
-# comment, and conditionally swaps the status label via bot-on-pr-update.js.
+# comment, and conditionally swaps the status label via bot-on-pr-update.cjs.
 # For edited events, exits early if only title/base changed.
 on:
   pull_request_target:
@@ -37,5 +37,5 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            const script = require('./.github/scripts/bot-on-pr-update.js');
+            const script = require('./.github/scripts/bot-on-pr-update.cjs');
             await script({ github, context });

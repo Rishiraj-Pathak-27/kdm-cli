@@ -5,16 +5,16 @@ name: Bot - On Comment
 #
 # Purpose:
 #   Runs when a NEW comment is created on an issue. Dispatches to
-#   bot-on-comment.js which parses slash commands (e.g. /assign) from
+#   bot-on-comment.cjs which parses slash commands (e.g. /assign) from
 #   the comment body and runs the appropriate handler.
 #
 # Currently supported commands:
-#   /assign — Assign the commenter to the issue (see commands/assign.js
+#   /assign — Assign the commenter to the issue (see commands/assign.cjs
 #             for eligibility checks: skill prerequisites, assignment
 #             limits, required status labels).
-#   /unassign — Unassign the commenter from the issue (see commands/unassign.js
+#   /unassign — Unassign the commenter from the issue (see commands/unassign.cjs
 #               for authorization and label reversion details).
-#   /finalize — Finalize the issue (see commands/finalize.js for triage
+#   /finalize — Finalize the issue (see commands/finalize.cjs for triage
 #               permission requirements, label validation, and status updates).
 #
 # Security:
@@ -68,5 +68,5 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            const script = require('./.github/scripts/bot-on-comment.js');
+            const script = require('./.github/scripts/bot-on-comment.cjs');
             await script({ github, context });

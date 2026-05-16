@@ -2,7 +2,7 @@ name: Bot - On PR Open
 
 # Runs on opened, reopened, and ready_for_review. Single job: run all 4 checks
 # (DCO, GPG, merge conflict, issue link), post unified comment, auto-assign,
-# and apply status label via bot-on-pr-open.js.
+# and apply status label via bot-on-pr-open.cjs.
 on:
   # Uses pull_request_target so fork PRs get write token without repo setting; we
   # checkout default branch only so we never run PR branch code.
@@ -39,5 +39,5 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            const script = require('./.github/scripts/bot-on-pr-open.js');
+            const script = require('./.github/scripts/bot-on-pr-open.cjs');
             await script({ github, context });
