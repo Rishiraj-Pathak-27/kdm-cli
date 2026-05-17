@@ -50,6 +50,7 @@ export const showHealth = async (target: string): Promise<void> => {
     logger.error?.(
       `Unknown target: ${target}. Valid targets are: ${validTargets.join(', ')}.`,
     );
+    process.exitCode = 1;
     return;
   }
 
