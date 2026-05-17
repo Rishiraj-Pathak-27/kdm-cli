@@ -35,9 +35,15 @@ function getUpdateType(installed: string, latest: string): string {
   const [i1] = installed.replace(/^v/, '').split('.').map(Number);
   const [l1] = latest.replace(/^v/, '').split('.').map(Number);
   if (l1 > i1) return 'major';
-  const [i2] = installed.replace(/^v/, '').split('.').map(Number);
-  const [l2] = latest.replace(/^v/, '').split('.').map(Number);
+function getUpdateType(installed: string, latest: string): string {
+  const cmp = compareSemver(installed, latest);
+  if (cmp === 'eq') return '';
+  const [i1 = 0, i2 = 0] = installed.replace(/^v/, '').split('.').map(Number);
+  const [l1 = 0, l2 = 0] = latest.replace(/^v/, '').split('.').map(Number);
+  if (l1 > i1) return 'major';
   if (l2 > i2) return 'minor';
+  return 'patch';
+}
   return 'patch';
 }
 
