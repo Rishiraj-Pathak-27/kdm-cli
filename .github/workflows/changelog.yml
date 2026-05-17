@@ -7,7 +7,7 @@ on:
     tags:
       - 'v*.*.*'
 
- jobs:
+jobs:
   generate-changelog:
     runs-on: ubuntu-latest  # Ensure this is here and aligned
 
