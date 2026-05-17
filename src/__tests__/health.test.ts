@@ -172,4 +172,24 @@ describe('health command', () => {
     );
     expect(tableUtils.renderTable).not.toHaveBeenCalled();
   });
+
+  it('should render available pods when containers fail for "health all"', async () => {
+    vi.mocked(getRunningContainers).mockRejectedValue(new Error('Docker connection failed'));
+    vi.mocked(getRunningPods).mockResolvedValue([
+      { name: 'api', namespace: 'default', status: 'Running', restarts: 0 },
+    ]);
+
+    await program.parseAsync(['node', 'test', 'health', 'all']);
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Docker unavailable'),
+    );
+    expect(tableUtils.renderTable).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rows: expect.arrayContaining([
+          expect.arrayContaining(['pod', 'api']),
+        ]),
+      }),
+    );
+  });
 });
