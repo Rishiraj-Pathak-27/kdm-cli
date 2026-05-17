@@ -1,0 +1,98 @@
+name: Auto Changelog & Versioned Docs
+
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  generate-changelog:
+    runs-on: ubuntu-latest  # Ensure this is here and aligned
+
+    concurrency:
+      group: auto-changelog-${{ github.ref_name }}
+      cancel-in-progress: false
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Build Changelog/Release Notes
+        id: github_release
+        uses: mikepenz/release-changelog-builder-action@32e3c96f29a6532607f638797455e9e98cfc703d # v4
+        with:
+          configuration: |
+            {
+              "categories": [
+                { "title": "### Features", "labels": ["feature", "feat"] },
+                { "title": "### Fixes", "labels": ["fix", "bug"] },
+                { "title": "### Improvements", "labels": ["perf", "refactor"] },
+                { "title": "### Documentation", "labels": ["doc", "docs"] }
+              ]
+            }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Scaffold Versioned CLI Documentation System
+        env:
+          CHANGELOG: ${{ steps.github_release.outputs.changelog }}
+        run: |
+          VERSION="${{ github.ref_name }}"
+          TARGET_DIR="docs/${VERSION}"
+          TEMPLATE_DIR=".github/docs-template"
+          
+          # 1. Create the unique versioned directory hierarchy
+          mkdir -p "$TARGET_DIR"
+          
+          # 2. If a core template folder exists, copy its entire structural hierarchy over
+          if [ -d "$TEMPLATE_DIR" ]; then
+            shopt -s dotglob nullglob
+            template_items=("$TEMPLATE_DIR"/*)
+            if [ ${`#template_items`[@]} -gt 0 ]; then
+              cp -r "${template_items[@]}" "$TARGET_DIR"/
+            fi
+            # 3. Recursively inject the mandatory Version string into every markdown file copied
+            find "$TARGET_DIR" -type f -name "*.md" -exec sh -c '
+              for file; do
+                if ! grep -Fq "**Version:** '"$VERSION"'" "$file"; then
+                  printf "\n---\n**Version:** %s\n" "'"$VERSION"'" >> "$file"
+                fi
+              done
+            ' _ {} +
+          else
+            # Fallback structure if the template directory isn't initialized yet
+            mkdir -p "$TARGET_DIR/config" "$TARGET_DIR/health" "$TARGET_DIR/logs" "$TARGET_DIR/show" "$TARGET_DIR/watch"
+          fi
+          
+          # 4. Generate the dedicated version README.md using the Release Engine Changelog output
+          VERSION_README="$TARGET_DIR/README.md"
+          echo -e "# KDM CLI Documentation - ${VERSION}\n" > "$VERSION_README"
+          echo -e "Published on: $(date +'%Y-%m-%d')\n" >> "$VERSION_README"
+          printf '%s\n' "$CHANGELOG" >> "$VERSION_README"
+          printf '\n---\n**Version Information:** %s\n' "$VERSION" >> "$VERSION_README"
+
+      - name: Commit and Push Changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          git checkout ${{ github.event.repository.default_branch }}
+          git pull origin ${{ github.event.repository.default_branch }} --ff-only
+          
+          # Track and stage the entire documentation change block
+          git add docs/
+          if git diff --cached --quiet; then
+            echo "No documentation changes to commit."
+            exit 0
+          fi
+          
+          git commit -m "docs: auto-scaffold documentation architecture for ${{ github.ref_name }} [skip ci]"
+          git push origin HEAD:${{ github.event.repository.default_branch }}
