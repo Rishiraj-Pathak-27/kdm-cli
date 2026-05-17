@@ -36,9 +36,13 @@ const printStream = (value: unknown): void =>
   void process.stdout.write(String(value));
 
 export const showLogs = async (name: string): Promise<void> => {
+  if (!name?.trim()) {
+    logger.error?.('A container ID prefix, container name, or pod name is required.');
+    return;
+  }
+
   logger.info?.(`Showing logs for ${name}...`);
   const spinner = createSpinner(`Fetching logs for ${name}...`).start();
-
   // Docker first
   try {
     const docker = getDockerClient();
