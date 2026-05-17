@@ -62,7 +62,7 @@ jobs:
             ' _ {} +
           else
             # Fallback structure if the template directory isn't initialized yet
-            mkdir -p "$TARGET_DIR/config" "$TARGET_DIR/runner" "$TARGET_DIR/docker" "$TARGET_DIR/kubernetes" "$TARGET_DIR/monitoring"
+            mkdir -p "$TARGET_DIR/config" "$TARGET_DIR/health" "$TARGET_DIR/logs" "$TARGET_DIR/show" "$TARGET_DIR/watch"
           fi
           
           # 4. Generate the dedicated version README.md using the Release Engine Changelog output
