@@ -15,6 +15,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # Dynamically pulls their default branch (main/master) instead of hardcoding your feature branch
+          ref: ${{ github.event.repository.default_branch }}
 
       - name: Build Changelog/Release Notes
         id: github_release
@@ -38,7 +40,6 @@ jobs:
           mkdir -p docs/changelogs
           
           # 2. Define the filename dynamically using the current release tag string
-          # Example output path: docs/changelogs/v2.1.0.md
           VERSION_FILE="docs/changelogs/${{ github.ref_name }}.md"
           
           # 3. Write clean header structure and populate it with generated release notes
@@ -51,13 +52,14 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
+          # Force tracking line to align cleanly with the upstream main branch architecture
+          git checkout ${{ github.event.repository.default_branch }}
+          git pull origin ${{ github.event.repository.default_branch }} --ff-only
+          
           # Stage the docs directory
           git add docs/
           
           git commit -m "chore: add version doc changelog for ${{ github.ref_name }} [skip ci]"
           
-          # 1. Pull latest changes (like the newly created tag/release info) and rebase your commit on top of it
-          git pull origin feat/changelog-auto-workflow --rebase
-          
-          # 2. Push the changes back securely
-          git push origin HEAD:feat/changelog-auto-workflow
+          # Push directly and safely into the project's production target branch
+          git push origin HEAD:${{ github.event.repository.default_branch }}
