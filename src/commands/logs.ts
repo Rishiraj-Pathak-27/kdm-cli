@@ -1,36 +1,9 @@
-// import { Command } from 'commander';
-// import { logger } from '../utils/logger';
-// import { createSpinner } from '../ui/spinner';
-
-// export const registerLogsCommand = (program: Command) => {
-//   program
-//     .command('logs <name>')
-//     .description('Show logs for a container or pod')
-//     .action(async (name) => {
-//       const spinner = createSpinner(`Fetching logs for ${name}...`).start();
-//       try {
-//         // TODO: Implement actual log fetching logic
-//         spinner.stop(`Logs for ${name} fetched`);
-//         logger.info(`Showing logs for ${name}...`);
-//       } catch (error) {
-//         const errorMessage = (error as Error).message;
-//         spinner.fail(`Failed to fetch logs for ${name}: ${errorMessage}`);
-//         logger.error(`Failed to fetch logs for ${name}: ${errorMessage}`, error);
-//         throw error;
-//       }
-//     });
-// };
-
-
-// updated
-
 import { Command } from 'commander';
 import { getDockerClient } from '../docker/client';
 import { getK8sApi } from '../kubernetes/client';
 import { logger } from '../utils/logger';
 import { createSpinner } from '../ui/spinner';
 
-// ✅ CodeRabbit (Nitpick): simplified — Buffer and non-Buffer values both
 //    convert correctly with String(), no branch needed
 const printStream = (value: unknown): void =>
   void process.stdout.write(String(value));
@@ -61,7 +34,6 @@ export const showLogs = async (name: string): Promise<void> => {
       return;
     }
   } catch (error) {
-    // ✅ CodeRabbit (Minor): log why Docker failed instead of swallowing silently
     logger.debug?.(
       `Docker unavailable, trying Kubernetes: ${
         error instanceof Error ? error.message : String(error)
