@@ -95,7 +95,24 @@ jobs:
           git config --local user.name "github-actions[bot]"
           
           git checkout ${{ github.event.repository.default_branch }}
-          git pull origin ${{ github.event.repository.default_branch }} --ff-only
+          git checkout ${{ github.event.repository.default_branch }}
+          
+          # Retry fast-forward pull up to 3 times with exponential backoff
+          max_attempts=3
+          attempt=1
+          while [ $attempt -le $max_attempts ]; do
+            if git pull origin ${{ github.event.repository.default_branch }} --ff-only; then
+              break
+            fi
+            if [ $attempt -eq $max_attempts ]; then
+              echo "ERROR: Failed to fast-forward after $max_attempts attempts"
+              echo "Manual intervention required - docs/ has conflicts"
+              exit 1
+            fi
+            echo "Fast-forward failed (attempt $attempt/$max_attempts), retrying in $((2**attempt))s..."
+            sleep $((2**attempt))
+            ((attempt++))
+          done
           
           git add docs/
           
