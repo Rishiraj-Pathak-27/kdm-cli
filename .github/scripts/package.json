@@ -3,6 +3,6 @@
   "private": true,
   "type": "commonjs",
   "devDependencies": {
-    "eslint": "^9.0.0"
+    "eslint": "^10.4.0"
   }
 }
