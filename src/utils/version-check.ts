@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Read the actual package.json version at runtime
-function getInstalledVersion(): string {
+export function getInstalledVersion(): string {
   const paths = [
     join(__dirname, '..', 'package.json'),      // production: dist/../package.json
     join(__dirname, '..', '..', 'package.json') // development: src/utils/../../package.json
@@ -16,7 +16,7 @@ function getInstalledVersion(): string {
   for (const pkgPath of paths) {
     try {
       const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-      if (pkg.version) return pkg.version;
+      if (typeof pkg.version === 'string' && pkg.version) return pkg.version;
     } catch {
       // Try next path
     }
