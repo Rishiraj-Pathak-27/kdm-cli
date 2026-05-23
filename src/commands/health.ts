@@ -32,6 +32,12 @@ import { logger } from '../utils/logger';
 import { createSpinner } from '../ui/spinner';
 import { renderTable } from '../ui/table';
 
+export interface HealthOptions {
+  watch?: boolean;
+  interval?: string;
+  signal?: AbortSignal;
+}
+
 const healthColor = (status: string): string => {
   if (status === 'healthy' || status === 'running' || status === 'Running') {
     return chalk.green(status);
@@ -42,7 +48,56 @@ const healthColor = (status: string): string => {
   return chalk.yellow(status);
 };
 
-export const showHealth = async (target: string): Promise<void> => {
+const fetchHealthRows = async (target: string): Promise<(string | number)[][]> => {
+  const rows: (string | number)[][] = [];
+  const shouldFetchContainers = target === 'all' || target === 'containers';
+  const shouldFetchPods = target === 'all' || target === 'pods';
+
+  const [containerResult, podResult] = await Promise.allSettled([
+    shouldFetchContainers ? getRunningContainers() : Promise.resolve([]),
+    shouldFetchPods ? getRunningPods() : Promise.resolve([]),
+  ]);
+
+  if (shouldFetchContainers) {
+    if (containerResult.status === 'fulfilled') {
+      rows.push(
+        ...containerResult.value.map((container) => [
+          'container',
+          container.name,
+          healthColor(container.state),
+          container.status,
+        ]),
+      );
+    } else {
+      const message = containerResult.reason instanceof Error
+        ? containerResult.reason.message
+        : String(containerResult.reason);
+      logger.warn?.(`Docker unavailable: ${message}`);
+    }
+  }
+
+  if (shouldFetchPods) {
+    if (podResult.status === 'fulfilled') {
+      rows.push(
+        ...podResult.value.map((pod) => [
+          'pod',
+          pod.name,
+          healthColor(pod.status),
+          `namespace: ${pod.namespace}, restarts: ${pod.restarts}`,
+        ]),
+      );
+    } else {
+      const message = podResult.reason instanceof Error
+        ? podResult.reason.message
+        : String(podResult.reason);
+      logger.warn?.(`Kubernetes unavailable: ${message}`);
+    }
+  }
+
+  return rows;
+};
+
+export const showHealth = async (target: string, options: HealthOptions = {}): Promise<void> => {
   logger.info?.(`Showing health for ${target}...`);
 
   const validTargets = ['all', 'containers', 'pods'];
@@ -54,54 +109,90 @@ export const showHealth = async (target: string): Promise<void> => {
     return;
   }
 
-  const spinner = createSpinner(`Checking ${target} health...`).start();
-  const rows: (string | number)[][] = [];
-
-  if (target === 'all' || target === 'containers') {
-    try {
-      const containers = await getRunningContainers();
-      rows.push(
-        ...containers.map((container) => [
-          'container',
-          container.name,
-          healthColor(container.state),
-          container.status,
-        ]),
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.warn?.(`Docker unavailable: ${message}`);
+  if (options.watch) {
+    const intervalStr = options.interval || '5';
+    if (!/^\d+$/.test(intervalStr)) {
+      logger.error?.('Invalid interval. Please provide a positive integer number of seconds.');
+      process.exitCode = 1;
+      return;
     }
-  }
-
-  if (target === 'all' || target === 'pods') {
-    try {
-      const pods = await getRunningPods();
-      rows.push(
-        ...pods.map((pod) => [
-          'pod',
-          pod.name,
-          healthColor(pod.status),
-          `namespace: ${pod.namespace}, restarts: ${pod.restarts}`,
-        ]),
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.warn?.(`Kubernetes unavailable: ${message}`);
+    const intervalSeconds = parseInt(intervalStr, 10);
+    if (intervalSeconds <= 0) {
+      logger.error?.('Invalid interval. Please provide a positive integer number of seconds.');
+      process.exitCode = 1;
+      return;
     }
+
+    let isRunning = true;
+    let timer: NodeJS.Timeout | undefined;
+
+    const cleanup = () => {
+      isRunning = false;
+      if (timer) {
+        clearTimeout(timer);
+      }
+      if (options.signal) {
+        options.signal.removeEventListener('abort', cleanup);
+      }
+    };
+
+    if (options.signal) {
+      if (options.signal.aborted) {
+        cleanup();
+        return;
+      }
+      options.signal.addEventListener('abort', cleanup);
+    }
+
+    const poll = async () => {
+      if (!isRunning || (options.signal && options.signal.aborted)) {
+        cleanup();
+        return;
+      }
+
+      const rows = await fetchHealthRows(target);
+
+      // Clear terminal screen
+      process.stdout.write('\x1Bc');
+
+      const timestamp = new Date().toLocaleTimeString();
+      logger.info?.(
+        chalk.bold.cyan(`[KDM Health] Target: ${target} | Last updated: ${timestamp} (Interval: ${intervalSeconds}s)`)
+      );
+      logger.info?.(chalk.dim('Press Ctrl+C to exit\n'));
+
+      if (rows.length === 0) {
+        logger.warn?.(`No ${target === 'all' ? 'workloads' : target} found.`);
+      } else {
+        renderTable({
+          head: ['TYPE', 'NAME', 'HEALTH', 'DETAILS'],
+          rows,
+        });
+      }
+
+      if (isRunning && (!options.signal || !options.signal.aborted)) {
+        timer = setTimeout(poll, intervalSeconds * 1000);
+      } else {
+        cleanup();
+      }
+    };
+
+    await poll();
+  } else {
+    const spinner = createSpinner(`Checking ${target} health...`).start();
+    const rows = await fetchHealthRows(target);
+    spinner.stop();
+
+    if (rows.length === 0) {
+      logger.warn?.(`No ${target === 'all' ? 'workloads' : target} found.`);
+      return;
+    }
+
+    renderTable({
+      head: ['TYPE', 'NAME', 'HEALTH', 'DETAILS'],
+      rows,
+    });
   }
-
-  spinner.stop();
-
-  if (rows.length === 0) {
-    logger.warn?.(`No ${target === 'all' ? 'workloads' : target} found.`);
-    return;
-  }
-
-  renderTable({
-    head: ['TYPE', 'NAME', 'HEALTH', 'DETAILS'],
-    rows,
-  });
 };
 
 export const registerHealthCommand = (program: Command): void => {
@@ -111,5 +202,26 @@ export const registerHealthCommand = (program: Command): void => {
       'Show health status for pods, containers, or all workloads.\n' +
       'Valid targets: all | containers | pods',
     )
-    .action(showHealth);
+    .option('-w, --watch', 'Watch mode: continuously refresh health output')
+    .option('-i, --interval <number>', 'Refresh interval in seconds', '5')
+    .action(async (target, options) => {
+      if (options.watch) {
+        const controller = new AbortController();
+        const sigintHandler = () => {
+          controller.abort();
+          process.exit(0);
+        };
+        process.once('SIGINT', sigintHandler);
+        process.once('SIGTERM', sigintHandler);
+
+        try {
+          await showHealth(target, { ...options, signal: controller.signal });
+        } finally {
+          process.off('SIGINT', sigintHandler);
+          process.off('SIGTERM', sigintHandler);
+        }
+      } else {
+        await showHealth(target, options);
+      }
+    });
 };
