@@ -36,7 +36,10 @@ export const getSMTPSettings = () => {
     port: config.get('email_port') || 587,
     auth: {
       user: config.get('email_user'),
-      pass: process.env.KDM_SMTP_PASSWORD || config.get('email_password'),
+      pass:
+        process.env.KDM_SMTP_PASSWORD !== undefined
+          ? process.env.KDM_SMTP_PASSWORD
+          : config.get('email_password'),
     },
     to: config.get('email_to'),
   };

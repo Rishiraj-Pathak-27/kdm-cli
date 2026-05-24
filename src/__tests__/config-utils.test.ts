@@ -83,5 +83,10 @@ describe('config utils', () => {
     process.env.KDM_SMTP_PASSWORD = 'env-password';
     settings = getSMTPSettings();
     expect(settings.auth.pass).toBe('env-password');
+
+    // Case 3: Env variable set to empty string, should be honored instead of falling back to config password
+    process.env.KDM_SMTP_PASSWORD = '';
+    settings = getSMTPSettings();
+    expect(settings.auth.pass).toBe('');
   });
 });
