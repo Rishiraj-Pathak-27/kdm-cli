@@ -55,6 +55,25 @@ To set up your development environment:
    npm run test
    ```
 
+## Contributors
+
+This project follows the [All Contributors](https://github.com/all-contributors/all-contributors) specification. Contributions of any kind are welcome!
+
+### Adding Yourself as a Contributor
+
+We use the [All Contributors Bot](https://allcontributors.org/docs/en/bot/overview) to automate adding contributors. You can add yourself by leaving a comment on your Pull Request or any Issue:
+
+```
+@all-contributors please add @<username> for <contribution-type>
+```
+
+For example, to add yourself for code contribution:
+```
+@all-contributors please add @your-username for code
+```
+
+For a list of valid contribution types, see the [Emoji Key](https://allcontributors.org/docs/en/emoji-key).
+
 ## Coding Style
 
 Please ensure your code is idiomatic and follows the existing TypeScript conventions in the codebase.

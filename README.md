@@ -1,5 +1,7 @@
 # KDM — Kubernetes + Docker Monitoring CLI
 
+[![All Contributors](https://img.shields.io/github/all-contributors/KDM-cli/kdm-cli?color=ee8449&style=flat-square)](#contributors)
+
 KDM (Kubernetes Docker Monitor) is a lightweight, terminal-based monitoring CLI tool that automatically detects and monitors running Docker containers and Kubernetes pods. It provides real-time resource usage, health status, and unified views of your runners.
 
 ## Features
@@ -64,6 +66,17 @@ KDM is built with:
 - **@kubernetes/client-node** for Kubernetes integration
 - **Ink** for terminal UI
 - **tsup** for high-performance bundling
+
+## Contributors
+
+<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
+<!-- prettier-ignore-start -->
+<!-- markdownlint-disable -->
+
+<!-- markdownlint-restore -->
+<!-- prettier-ignore-end -->
+
+<!-- ALL-CONTRIBUTORS-LIST:END -->
 
 ## License
 
