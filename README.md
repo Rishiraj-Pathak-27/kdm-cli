@@ -78,4 +78,4 @@ KDM is built with:
 </table>
 
 ## License
-[GNU AGPL 3.0](https://github.com/Yuvraj-Sarathe/kdm-cli?tab=license-1-ov-file)
+[GNU AGPL 3.0](https://github.com/KDM-cli/kdm-cli?tab=AGPL-3.0-1-ov-file#)
