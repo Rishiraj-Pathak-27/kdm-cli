@@ -68,3 +68,49 @@ jobs:
           tag_name: v${{ steps.get_version.outputs.VERSION }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rollback release on failure
+        if: failure()
+        shell: bash
+        run: |
+          VERSION=$(node -e "console.log(JSON.parse(require('fs').readFileSync('./package.json', 'utf8')).version)")
+          TAG="v$VERSION"
+          RELEASE_SHA=$(git rev-parse HEAD)
+          COMMIT_MSG=$(git log -1 --pretty=%B "$RELEASE_SHA")
+          
+          if echo "$COMMIT_MSG" | grep -q "chore: release v$VERSION"; then
+            echo "Workflow failed. Attempting to roll back release $TAG..."
+            
+            # Delete remote tag if it exists
+            git push origin :refs/tags/"$TAG" || true
+            
+            # Fetch latest remote changes
+            git fetch origin main
+            REMOTE_SHA=$(git rev-parse origin/main)
+            
+            # Ensure local working directory is clean
+            git reset --hard HEAD
+            
+            if [ "$REMOTE_SHA" = "$RELEASE_SHA" ]; then
+              echo "Release commit is the latest on origin/main. Force-pushing HEAD~1..."
+              if git push origin HEAD~1:main --force; then
+                echo "Rollback successful: release commit removed."
+              else
+                echo "Force-push failed (likely due to branch protection). Creating a revert commit instead..."
+                git revert --no-edit HEAD
+                git push origin HEAD:main
+              fi
+            else
+              if git merge-base --is-ancestor "$RELEASE_SHA" origin/main; then
+                echo "Release commit exists on origin/main but is not the latest. Reverting it..."
+                git checkout main
+                git pull origin main
+                git revert --no-edit "$RELEASE_SHA"
+                git push origin HEAD:main
+              else
+                echo "Release commit was not pushed to origin/main. No rollback needed."
+              fi
+            fi
+          else
+            echo "No release commit found on HEAD. No rollback needed."
+          fi
