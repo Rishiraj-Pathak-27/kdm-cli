@@ -24,6 +24,7 @@ const promptReconfigurationIfNeeded = async (): Promise<boolean> => {
     console.log(chalk.dim('Setup cancelled. Current configuration unchanged.'));
     return false;
   }
+
   return true;
 };
 
@@ -46,16 +47,19 @@ const handleDiscordSetup = async () => {
   clearNotificationCredentials();
   setConfig('discord_webhook', webhook);
   setConfig('notification_service', 'discord');
+
   console.log(chalk.green('\n✓ Discord Webhook configured.'));
 };
 
 const handleEmailSetup = async () => {
   printEmailSmtpGuide();
+
   const host = await input({
     message: 'SMTP Host:',
     placeholder: 'smtp.gmail.com',
     validate: (v) => v.length > 0 || 'Host is required',
   });
+
   const portStr = await input({
     message: 'SMTP Port:',
     defaultValue: '587',
@@ -64,23 +68,33 @@ const handleEmailSetup = async () => {
       return (/^\d+$/.test(v) && port > 0 && port <= 65535) || 'Must be a valid port number (1-65535)';
     },
   });
+
   const user = await input({
     message: 'SMTP User:',
     validate: (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) || 'Must be a valid email address',
   });
+
   const to = await input({
     message: 'Alert Recipient Email:',
     validate: (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) || 'Must be a valid email address',
   });
+
+  const password = await input({
+    message: 'SMTP Password (optional):',
+    validate: () => true,
+  });
+
   clearNotificationCredentials();
   setConfig('email_host', host);
   setConfig('email_port', parseInt(portStr, 10));
   setConfig('email_user', user);
   setConfig('email_to', to);
+  if (password) {
+    setConfig('email_password', password);
+  }
   setConfig('notification_service', 'email');
+
   console.log(chalk.dim('  Set the SMTP password via the KDM_SMTP_PASSWORD environment variable.'));
-  console.log(chalk.green('\n✓ Email SMTP configured.'));
-  setConfig('notification_service', 'email');
   console.log(chalk.green('\n✓ Email SMTP configured.'));
 };
 
