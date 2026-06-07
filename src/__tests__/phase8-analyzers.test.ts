@@ -94,7 +94,8 @@ interface VerifyFailureParams {
   expectedKind: string;
   expectedName: string;
   expectedNamespace?: string;
-  assertErrors: (errors: string) => void;
+  expectedErrors?: string[];
+  exactError?: string;
 }
 
 /**
@@ -109,7 +110,15 @@ const verifyAnalyzerFailure = async (params: VerifyFailureParams): Promise<void>
   if (params.expectedNamespace) {
     expect(results[0].namespace).toBe(params.expectedNamespace);
   }
-  params.assertErrors(joinErrors(results));
+  const errors = joinErrors(results);
+  if (params.exactError) {
+    expect(errors).toBe(params.exactError);
+  }
+  if (params.expectedErrors) {
+    for (const exp of params.expectedErrors) {
+      expect(errors).toContain(exp);
+    }
+  }
 };
 
 // ─── ReplicaSet Analyzer ───────────────────────────────────────────
@@ -453,7 +462,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'ReplicaSet',
       expectedName: 'api-rs',
       expectedNamespace: 'production',
-      assertErrors: (errors: string) => expect(errors).toContain('2/5 ready replicas'),
+      expectedErrors: ['2/5 ready replicas'],
     },
     {
       name: 'ReplicaSet conditions failure',
@@ -472,10 +481,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'ReplicaSet',
       expectedName: 'rs-cond',
       expectedNamespace: 'default',
-      assertErrors: (errors: string) => {
-        expect(errors).toContain('ReplicaFailure');
-        expect(errors).toContain('quota exceeded');
-      },
+      expectedErrors: ['ReplicaFailure', 'quota exceeded'],
     },
     {
       name: 'StatefulSet ready replicas mismatch',
@@ -489,7 +495,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'StatefulSet',
       expectedName: 'redis',
       expectedNamespace: 'cache',
-      assertErrors: (errors: string) => expect(errors).toContain('0/3 ready replicas'),
+      expectedErrors: ['0/3 ready replicas'],
     },
     {
       name: 'DaemonSet unavailable/misscheduled pods',
@@ -502,10 +508,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'DaemonSet',
       expectedName: 'fluentd',
       expectedNamespace: 'logging',
-      assertErrors: (errors: string) => {
-        expect(errors).toContain('3/5 ready pods');
-        expect(errors).toContain('2 misscheduled pods');
-      },
+      expectedErrors: ['3/5 ready pods', '2 misscheduled pods'],
     },
     {
       name: 'Job failed backoff limit exceeded',
@@ -522,11 +525,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'Job',
       expectedName: 'etl-job',
       expectedNamespace: 'batch',
-      assertErrors: (errors: string) => {
-        expect(errors).toContain('3 failed pods');
-        expect(errors).toContain('BackoffLimitExceeded');
-        expect(errors).toContain('exceeded backoff limit');
-      },
+      expectedErrors: ['3 failed pods', 'BackoffLimitExceeded', 'exceeded backoff limit'],
     },
     {
       name: 'Job singular pod failure',
@@ -540,7 +539,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'Job',
       expectedName: 'one-fail',
       expectedNamespace: 'default',
-      assertErrors: (errors: string) => expect(errors).toBe('Job has 1 failed pod'),
+      exactError: 'Job has 1 failed pod',
     },
     {
       name: 'CronJob suspended',
@@ -553,7 +552,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'CronJob',
       expectedName: 'backup',
       expectedNamespace: 'ops',
-      assertErrors: (errors: string) => expect(errors).toContain('suspended'),
+      expectedErrors: ['suspended'],
     },
     {
       name: 'CronJob with no schedule',
@@ -566,7 +565,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'CronJob',
       expectedName: 'no-sched',
       expectedNamespace: 'default',
-      assertErrors: (errors: string) => expect(errors).toContain('no schedule defined'),
+      expectedErrors: ['no schedule defined'],
     },
     {
       name: 'Ingress with no rules',
@@ -579,7 +578,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'Ingress',
       expectedName: 'empty-ing',
       expectedNamespace: 'web',
-      assertErrors: (errors: string) => expect(errors).toContain('no rules defined'),
+      expectedErrors: ['no rules defined'],
     },
     {
       name: 'Ingress hosts without TLS',
@@ -594,7 +593,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'Ingress',
       expectedName: 'no-tls',
       expectedNamespace: 'default',
-      assertErrors: (errors: string) => expect(errors).toContain('hosts but no TLS'),
+      expectedErrors: ['hosts but no TLS'],
     },
     {
       name: 'Ingress missing backend service',
@@ -609,7 +608,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'Ingress',
       expectedName: 'bad-backend',
       expectedNamespace: 'default',
-      assertErrors: (errors: string) => expect(errors).toContain('no backend service'),
+      expectedErrors: ['no backend service'],
     },
     {
       name: 'ConfigMap with no data keys',
@@ -621,7 +620,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'ConfigMap',
       expectedName: 'empty-cm',
       expectedNamespace: 'default',
-      assertErrors: (errors: string) => expect(errors).toContain('no data keys'),
+      expectedErrors: ['no data keys'],
     },
     {
       name: 'HPA at max replicas',
@@ -635,7 +634,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'HorizontalPodAutoscaler',
       expectedName: 'web-hpa',
       expectedNamespace: 'production',
-      assertErrors: (errors: string) => expect(errors).toContain('maximum replicas (10/10)'),
+      expectedErrors: ['maximum replicas (10/10)'],
     },
     {
       name: 'HPA scaling limited / unable to scale',
@@ -655,10 +654,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'HorizontalPodAutoscaler',
       expectedName: 'limited-hpa',
       expectedNamespace: 'default',
-      assertErrors: (errors: string) => {
-        expect(errors).toContain('scaling limited');
-        expect(errors).toContain('unable to scale');
-      },
+      expectedErrors: ['scaling limited', 'unable to scale'],
     },
     {
       name: 'PDB with zero disruptions',
@@ -671,10 +667,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'PodDisruptionBudget',
       expectedName: 'api-pdb',
       expectedNamespace: 'default',
-      assertErrors: (errors: string) => {
-        expect(errors).toContain('zero disruptions');
-        expect(errors).toContain('2/3 healthy pods');
-      },
+      expectedErrors: ['zero disruptions', '2/3 healthy pods'],
     },
     {
       name: 'NetworkPolicy empty podSelector',
@@ -687,10 +680,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'NetworkPolicy',
       expectedName: 'deny-all',
       expectedNamespace: 'secure',
-      assertErrors: (errors: string) => {
-        expect(errors).toContain('empty podSelector');
-        expect(errors).toContain('blocks all ingress');
-      },
+      expectedErrors: ['empty podSelector', 'blocks all ingress'],
     },
     {
       name: 'NetworkPolicy blocks egress',
@@ -707,7 +697,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'NetworkPolicy',
       expectedName: 'no-egress',
       expectedNamespace: 'default',
-      assertErrors: (errors: string) => expect(errors).toContain('blocks all egress'),
+      expectedErrors: ['blocks all egress'],
     },
     {
       name: 'Events warning type',
@@ -723,10 +713,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'Event',
       expectedName: 'my-pod',
       expectedNamespace: 'kube-system',
-      assertErrors: (errors: string) => {
-        expect(errors).toContain('FailedScheduling');
-        expect(errors).toContain('Insufficient cpu');
-      },
+      expectedErrors: ['FailedScheduling', 'Insufficient cpu'],
     },
     {
       name: 'Storage class with no provisioner',
@@ -737,7 +724,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       }],
       expectedKind: 'Storage',
       expectedName: 'bad-sc',
-      assertErrors: (errors: string) => expect(errors).toContain('no provisioner'),
+      expectedErrors: ['no provisioner'],
     },
     {
       name: 'Storage PVC non-existent class',
@@ -750,7 +737,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'Storage',
       expectedName: 'orphan-pvc',
       expectedNamespace: 'default',
-      assertErrors: (errors: string) => expect(errors).toContain("'deleted-class' which does not exist"),
+      expectedErrors: ["'deleted-class' which does not exist"],
       preRun: () => {
         vi.mocked(listStorageClasses).mockResolvedValueOnce([{
           metadata: { name: 'gp2' },
@@ -774,11 +761,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'Security',
       expectedName: 'insecure-pod',
       expectedNamespace: 'default',
-      assertErrors: (errors: string) => {
-        expect(errors).toContain('may run as root');
-        expect(errors).toContain('privileged mode');
-        expect(errors).toContain('read-only root filesystem');
-      },
+      expectedErrors: ['may run as root', 'privileged mode', 'read-only root filesystem'],
     },
     {
       name: 'GatewayClass not accepted',
@@ -790,10 +773,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       }],
       expectedKind: 'GatewayClass',
       expectedName: 'istio',
-      assertErrors: (errors: string) => {
-        expect(errors).toContain('not accepted');
-        expect(errors).toContain('InvalidConfig');
-      },
+      expectedErrors: ['not accepted', 'InvalidConfig'],
     },
     {
       name: 'Gateway AddressNotAssigned',
@@ -807,10 +787,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'Gateway',
       expectedName: 'main-gw',
       expectedNamespace: 'istio-system',
-      assertErrors: (errors: string) => {
-        expect(errors).toContain('no listeners');
-        expect(errors).toContain('not programmed');
-      },
+      expectedErrors: ['no listeners', 'not programmed'],
     },
     {
       name: 'HTTPRoute missing backends / not accepted by parent',
@@ -824,10 +801,7 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: 'HTTPRoute',
       expectedName: 'api-route',
       expectedNamespace: 'default',
-      assertErrors: (errors: string) => {
-        expect(errors).toContain('not accepted');
-        expect(errors).toContain('no backend references');
-      },
+      expectedErrors: ['not accepted', 'no backend references'],
     },
   ])('$name failure is detected and reported', async (caseData) => {
     if (caseData.preRun) {
@@ -840,7 +814,8 @@ describe('Phase 8 analyzers — failure detection paths', () => {
       expectedKind: caseData.expectedKind,
       expectedName: caseData.expectedName,
       expectedNamespace: caseData.expectedNamespace,
-      assertErrors: caseData.assertErrors,
+      exactError: caseData.exactError,
+      expectedErrors: caseData.expectedErrors,
     });
   });
 });
