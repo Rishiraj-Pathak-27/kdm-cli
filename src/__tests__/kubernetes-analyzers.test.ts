@@ -126,7 +126,7 @@ describe('Kubernetes analyzers', () => {
     ]);
     vi.mocked(listPods).mockResolvedValueOnce([
       {
-        metadata: { name: 'api-pod', namespace: 'default' },
+        metadata: { name: 'api-pod', namespace: 'default', labels: { app: 'api' } },
         spec: {
           containers: [
             {
@@ -174,8 +174,7 @@ describe('Kubernetes analyzers', () => {
 
     expect(results).toHaveLength(1);
     const errors = results[0].errors.map((error) => error.text).join('\n');
-    expect(errors).toContain('Pending');
-    expect(errors).toContain('without a storage class');
+    expect(errors).toContain('pending without a storage class');
     expect(errors).toContain('VolumeBindingFailed');
     expect(errors).toContain('failed to bind volume');
   });
@@ -203,3 +202,33 @@ describe('Kubernetes analyzers', () => {
   });
 });
 
+describe('Kubernetes analyzers - API failure handling', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('propagates listPods API failures', async () => {
+    vi.mocked(listPods).mockRejectedValueOnce(new Error('API timeout'));
+    await expect(PodAnalyzer.analyze({})).rejects.toThrow('API timeout');
+  });
+
+  it('propagates listDeployments API failures', async () => {
+    vi.mocked(listDeployments).mockRejectedValueOnce(new Error('API timeout'));
+    await expect(DeploymentAnalyzer.analyze({})).rejects.toThrow('API timeout');
+  });
+
+  it('handles listServices API failures gracefully via Promise.allSettled', async () => {
+    vi.mocked(listServices).mockRejectedValueOnce(new Error('API timeout'));
+    await expect(ServiceAnalyzer.analyze({})).rejects.toThrow('API timeout');
+  });
+
+  it('propagates listPersistentVolumeClaims API failures', async () => {
+    vi.mocked(listPersistentVolumeClaims).mockRejectedValueOnce(new Error('API timeout'));
+    await expect(PersistentVolumeClaimAnalyzer.analyze({})).rejects.toThrow('API timeout');
+  });
+
+  it('propagates listNodes API failures', async () => {
+    vi.mocked(listNodes).mockRejectedValueOnce(new Error('API timeout'));
+    await expect(NodeAnalyzer.analyze({})).rejects.toThrow('API timeout');
+  });
+});

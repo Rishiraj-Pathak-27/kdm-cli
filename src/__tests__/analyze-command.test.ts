@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
 import { registerAnalyzeCommand } from '../commands/analyze';
 import { runAnalysis } from '../analysis/analysis';
@@ -20,6 +20,17 @@ vi.mock('../ui/spinner', () => ({
   })),
 }));
 
+vi.mock('../utils/logger', () => ({
+  logger: {
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    success: vi.fn(),
+    dim: vi.fn(),
+    newline: vi.fn(),
+  },
+}));
+
 describe('analyze command', () => {
   let program: Command;
   let logSpy: any;
@@ -31,6 +42,10 @@ describe('analyze command', () => {
     registerAnalyzeCommand(program);
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    process.exitCode = undefined;
   });
 
   it('passes Kubernetes analysis options to runAnalysis', async () => {
@@ -58,7 +73,7 @@ describe('analyze command', () => {
       'minikube',
     ]);
 
-    expect(runAnalysis).toHaveBeenCalledWith({
+    expect(runAnalysis).toHaveBeenCalledWith(expect.objectContaining({
       filters: ['Pod', 'Deployment'],
       namespace: 'default',
       labelSelector: 'app=api',
@@ -68,16 +83,54 @@ describe('analyze command', () => {
       withDocs: true,
       kubeconfig: '/tmp/kubeconfig',
       kubecontext: 'minikube',
-    });
+    }));
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('"status": "OK"'));
   });
 
   it('reports invalid output formats', async () => {
+    const { logger } = await import('../utils/logger');
     await program.parseAsync(['node', 'test', 'analyze', '--output', 'yaml']);
 
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Output format must be either'));
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Output format must be either'));
     expect(process.exitCode).toBe(1);
-    process.exitCode = undefined;
+  });
+
+  it('handles runAnalysis failures gracefully', async () => {
+    vi.mocked(runAnalysis).mockRejectedValueOnce(new Error('K8s connection failed'));
+    await program.parseAsync(['node', 'test', 'analyze']);
+
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('handles ProblemDetected status output', async () => {
+    vi.mocked(runAnalysis).mockResolvedValueOnce({
+      errors: [],
+      status: 'ProblemDetected',
+      problems: 2,
+      results: [
+        {
+          kind: 'Pod',
+          name: 'broken-pod',
+          namespace: 'default',
+          errors: [{ text: 'CrashLoopBackOff' }, { text: 'Container not ready' }],
+        },
+      ],
+    });
+    await program.parseAsync(['node', 'test', 'analyze', '--output', 'json']);
+
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('"status": "ProblemDetected"'));
+  });
+
+  it('runs with default options when no flags provided', async () => {
+    await program.parseAsync(['node', 'test', 'analyze']);
+
+    expect(runAnalysis).toHaveBeenCalledWith(expect.objectContaining({
+      filters: undefined,
+      namespace: undefined,
+      output: 'text',
+      maxConcurrency: 10,
+      withStats: false,
+      withDocs: false,
+    }));
   });
 });
-

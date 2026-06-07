@@ -10,6 +10,7 @@ export interface AnalysisOptions {
   maxConcurrency?: number;
   withStats?: boolean;
   withDocs?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface AnalysisStats {

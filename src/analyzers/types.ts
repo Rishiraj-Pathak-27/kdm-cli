@@ -9,6 +9,7 @@ export interface AnalyzerContext {
   kubeconfig?: string;
   kubecontext?: string;
   withDocs?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface AnalyzerResult {
