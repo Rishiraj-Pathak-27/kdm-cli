@@ -22,14 +22,17 @@ Tools such as `docker ps`, `kubectl get pods`, and `kubectl logs` are powerful, 
 KDM currently supports:
 
 - Auto-detecting Docker and Kubernetes availability.
-- Showing Docker containers.
-- Showing Kubernetes pods.
+- Showing Docker containers and Kubernetes pods.
 - Showing a unified runner view of containers and pods.
 - Showing Minikube profile status.
-- Checking workload health.
-- Watching health in refresh mode.
+- Checking workload health with watch and refresh modes.
 - Opening a live terminal dashboard.
-- Fetching logs from containers or pods.
+- Fetching logs from containers or pods with auto fallback.
+- Cluster configuration diagnostics (`kdm analyze`) with AI-powered explanations.
+- Managing 10+ AI backend providers (OpenAI, Anthropic, Gemini, Vertex, Ollama, etc.) via `kdm auth`.
+- Local explanation caching (`kdm cache`) to minimize token cost and latency.
+- Custom CRD analyzers configuration (`kdm custom-analyzer`) for Kyverno, KEDA, Prometheus, etc.
+- HTTP REST API and JSON-RPC Model Context Protocol (MCP) server daemon modes (`kdm serve`).
 - Sending alert notifications through Discord or email SMTP.
 - Storing local configuration for notification and runtime behavior.
 
@@ -96,6 +99,62 @@ kdm logs <name>
 ```
 
 KDM attempts to fetch logs for the given workload name. Docker is tried first, and Kubernetes can be used as a fallback depending on the workload.
+
+### Diagnostics & AI Analysis
+
+```bash
+kdm analyze
+kdm analyze --explain --backend ollama
+kdm analyze -n default --explain --anonymize
+```
+
+Runs dynamic configuration diagnostics on cluster workloads and requests AI-powered troubleshooting advice (optionally anonymizing resource names).
+
+### AI Providers (Auth)
+
+```bash
+kdm auth add -b openai -m gpt-4o -p <key>
+kdm auth default openai
+kdm auth list
+```
+
+Configure credentials and parameters for various AI provider backends.
+
+### Local Explanation Cache
+
+```bash
+kdm cache list
+kdm cache purge
+```
+
+Manage cached AI explanations to save API tokens.
+
+### Analyzer Filters
+
+```bash
+kdm filters list
+kdm filters add Ingress
+```
+
+Enable or disable specific default analyzers.
+
+### Custom Analyzers
+
+```bash
+kdm custom-analyzer add keda --command "kubectl get scaledobjects -A -o json"
+kdm custom-analyzer list
+```
+
+Register external commands or webhooks to analyze CustomResourceDefinitions (CRDs).
+
+### Server & MCP Modes
+
+```bash
+kdm serve --port 8080
+kdm serve --mcp
+```
+
+Start the KDM server in HTTP REST mode or stdio Model Context Protocol (MCP) mode.
 
 ### Configuration
 
@@ -191,14 +250,7 @@ KDM uses:
 
 ### Config Layer
 
-KDM stores local configuration with the `conf` package.
-
-Common config values include:
-
-- Notification service.
-- Discord webhook URL.
-- SMTP host and user.
-- Alert cooldown.
+KDM stores local configuration (general options and configured AI backends) with the `conf` package.
 
 Config locations:
 
@@ -207,6 +259,18 @@ Config locations:
 | macOS | `~/Library/Application Support/kdm-cli` |
 | Linux | `~/.config/kdm-cli` |
 | Windows | `%APPDATA%\kdm-cli` |
+
+### AI Integration & Client Layer
+
+Supports dynamic instantiation of AI clients (`openai`, `anthropic`, `google-gemini`, `google-vertex`, `ollama`, `ibm-watsonx`, `oci-genai`, etc.) based on registered credentials and settings. Handles prompts construction, system guidelines, and localization/language requests.
+
+### Cache Layer
+
+Handles SHA-256 keying and filesystem caching of diagnostic AI explanations to minimize external API roundtrips.
+
+### Server & MCP Daemon
+
+Exposes KDM capabilities via HTTP API or JSON-RPC Model Context Protocol (MCP) server daemon over stdio, enabling AI agent tools (like Claude Desktop) to trigger diagnostic checks.
 
 ### Alert Layer
 
@@ -644,15 +708,9 @@ kdm logs <container-or-pod-name>
 
 ## Future Direction
 
-KDM is being prepared to grow from a monitoring CLI into a more AI-assisted Kubernetes and Docker troubleshooting tool.
+With the implementation of the Kubernetes diagnostic analyzer engine, multi-backend AI explanations, configuration caching, custom resource analyzers, and MCP server integrations, KDM has evolved into a fully-featured AI-assisted Kubernetes and Docker troubleshooting toolkit.
 
-Planned areas include:
-
-- Kubernetes analyzer engine.
-- Docker analyzer engine.
-- AI-backed explanations.
-- Configurable filters.
-- Local and remote cache support.
-- Server and MCP modes.
-
-The current KDM foundation already provides the runtime connections, workload discovery, terminal UI, and alerting needed for those future capabilities.
+Future enhancements include:
+- Interactive TUI-based troubleshooting triggers directly inside watch mode.
+- Autopilot cluster remediation suggestions.
+- Multi-cluster remote monitoring dashboard aggregation.
