@@ -9,8 +9,8 @@ const StatusBadge = ({ status, type }: { status: string, type: 'pod' | 'containe
   const textColor = isRunning || bgColor === 'yellow' ? 'black' : 'white';
 
   return (
-    <Box backgroundColor={bgColor} paddingX={1}>
-      <Text color={textColor} bold>
+    <Box paddingX={1}>
+      <Text color={textColor} bold backgroundColor={bgColor}>
         {status.toUpperCase()}
       </Text>
     </Box>
@@ -65,8 +65,8 @@ export const WatchDashboard = () => {
       </Box>
 
       {error && (
-        <Box marginBottom={1} paddingX={1} backgroundColor="red">
-          <Text color="white" bold> ERROR: {error.type.toUpperCase()} - {error.message} </Text>
+        <Box marginBottom={1} paddingX={1}>
+          <Text color="white" bold backgroundColor="red"> ERROR: {error.type.toUpperCase()} - {error.message} </Text>
         </Box>
       )}
       

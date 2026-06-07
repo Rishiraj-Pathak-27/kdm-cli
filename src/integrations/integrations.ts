@@ -68,9 +68,9 @@ export const KEDAAnalyzer: Analyzer = {
     try {
       const api = getCustomObjectsApi(context);
       const response = context.namespace
-        ? await api.listNamespacedCustomObject('keda.sh', 'v1alpha1', context.namespace, 'scaledobjects')
-        : await api.listClusterCustomObject('keda.sh', 'v1alpha1', 'scaledobjects');
-      const items = ((response as any)?.body?.items ?? (response as any)?.items) ?? [];
+        ? await api.listNamespacedCustomObject({ group: 'keda.sh', version: 'v1alpha1', namespace: context.namespace, plural: 'scaledobjects' })
+        : await api.listClusterCustomObject({ group: 'keda.sh', version: 'v1alpha1', plural: 'scaledobjects' });
+      const items = (response as any)?.items ?? [];
       return items.flatMap((resource: any) => {
         const errors = checkKEDAScaledObject(resource);
         if (!errors.length) return [];
@@ -113,8 +113,8 @@ export const KyvernoAnalyzer: Analyzer = {
   async analyze(context: AnalyzerContext): Promise<AnalyzerResult[]> {
     try {
       const api = getCustomObjectsApi(context);
-      const response = await api.listClusterCustomObject('kyverno.io', 'v1', 'clusterpolicies');
-      const items = ((response as any)?.body?.items ?? (response as any)?.items) ?? [];
+      const response = await api.listClusterCustomObject({ group: 'kyverno.io', version: 'v1', plural: 'clusterpolicies' });
+      const items = (response as any)?.items ?? [];
       return items.flatMap((resource: any) => {
         const errors = checkKyvernoPolicy(resource);
         if (!errors.length) return [];
@@ -151,9 +151,9 @@ export const PrometheusAnalyzer: Analyzer = {
     try {
       const api = getCustomObjectsApi(context);
       const response = context.namespace
-        ? await api.listNamespacedCustomObject('monitoring.coreos.com', 'v1', context.namespace, 'servicemonitors')
-        : await api.listClusterCustomObject('monitoring.coreos.com', 'v1', 'servicemonitors');
-      const items = ((response as any)?.body?.items ?? (response as any)?.items) ?? [];
+        ? await api.listNamespacedCustomObject({ group: 'monitoring.coreos.com', version: 'v1', namespace: context.namespace, plural: 'servicemonitors' })
+        : await api.listClusterCustomObject({ group: 'monitoring.coreos.com', version: 'v1', plural: 'servicemonitors' });
+      const items = (response as any)?.items ?? [];
       return items.flatMap((resource: any) => {
         const errors = checkPrometheusServiceMonitor(resource);
         if (!errors.length) return [];

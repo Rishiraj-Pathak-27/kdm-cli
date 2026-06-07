@@ -16,26 +16,6 @@ export interface KubernetesResourceOptions extends KubernetesClientOptions {
   labelSelector?: string;
 }
 
-type K8sList<T> = { items?: T[] };
-type K8sResponse<T> = T | { body: T };
-
-/**
- * Unwraps the K8s API response body if it's wrapped in a response container object.
- * @param response K8s response container.
- * @returns Unwrapped payload object.
- */
-const unwrap = <T>(response: K8sResponse<T>): T =>
-  response && typeof response === 'object' && 'body' in response
-    ? (response as { body: T }).body
-    : (response as T);
-
-/**
- * Extracts items list from a K8s response representing a collection of objects.
- * @param response K8s list response container.
- * @returns Array of resources.
- */
-const items = <T>(response: K8sResponse<K8sList<T>>): T[] => unwrap(response).items ?? [];
-
 /**
  * Checks if the caught error matches a 404 NotFound HTTP status code.
  * @param error Caught exception object.
@@ -59,9 +39,9 @@ const isNotFoundError = (error: unknown): boolean => {
 export const listPods = async (options: KubernetesResourceOptions = {}): Promise<k8s.V1Pod[]> => {
   const api = getK8sApi(options);
   const response = options.namespace
-    ? await api.listNamespacedPod(options.namespace, undefined, undefined, undefined, undefined, options.labelSelector)
-    : await api.listPodForAllNamespaces(undefined, undefined, undefined, options.labelSelector);
-  return items<k8s.V1Pod>(response);
+    ? await api.listNamespacedPod({ namespace: options.namespace, labelSelector: options.labelSelector })
+    : await api.listPodForAllNamespaces({ labelSelector: options.labelSelector });
+  return response.items ?? [];
 };
 
 /**
@@ -74,9 +54,9 @@ export const listServices = async (
 ): Promise<k8s.V1Service[]> => {
   const api = getK8sApi(options);
   const response = options.namespace
-    ? await api.listNamespacedService(options.namespace, undefined, undefined, undefined, undefined, options.labelSelector)
-    : await api.listServiceForAllNamespaces(undefined, undefined, undefined, options.labelSelector);
-  return items<k8s.V1Service>(response);
+    ? await api.listNamespacedService({ namespace: options.namespace, labelSelector: options.labelSelector })
+    : await api.listServiceForAllNamespaces({ labelSelector: options.labelSelector });
+  return response.items ?? [];
 };
 
 /**
@@ -89,16 +69,9 @@ export const listPersistentVolumeClaims = async (
 ): Promise<k8s.V1PersistentVolumeClaim[]> => {
   const api = getK8sApi(options);
   const response = options.namespace
-    ? await api.listNamespacedPersistentVolumeClaim(
-        options.namespace,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        options.labelSelector,
-      )
-    : await api.listPersistentVolumeClaimForAllNamespaces(undefined, undefined, undefined, options.labelSelector);
-  return items<k8s.V1PersistentVolumeClaim>(response);
+    ? await api.listNamespacedPersistentVolumeClaim({ namespace: options.namespace, labelSelector: options.labelSelector })
+    : await api.listPersistentVolumeClaimForAllNamespaces({ labelSelector: options.labelSelector });
+  return response.items ?? [];
 };
 
 /**
@@ -108,8 +81,8 @@ export const listPersistentVolumeClaims = async (
  */
 export const listNodes = async (options: KubernetesResourceOptions = {}): Promise<k8s.V1Node[]> => {
   const api = getK8sApi(options);
-  const response = await api.listNode(undefined, undefined, undefined, options.labelSelector);
-  return items<k8s.V1Node>(response);
+  const response = await api.listNode({ labelSelector: options.labelSelector });
+  return response.items ?? [];
 };
 
 /**
@@ -122,9 +95,9 @@ export const listConfigMaps = async (
 ): Promise<k8s.V1ConfigMap[]> => {
   const api = getK8sApi(options);
   const response = options.namespace
-    ? await api.listNamespacedConfigMap(options.namespace, undefined, undefined, undefined, undefined, options.labelSelector)
-    : await api.listConfigMapForAllNamespaces(undefined, undefined, undefined, options.labelSelector);
-  return items<k8s.V1ConfigMap>(response);
+    ? await api.listNamespacedConfigMap({ namespace: options.namespace, labelSelector: options.labelSelector })
+    : await api.listConfigMapForAllNamespaces({ labelSelector: options.labelSelector });
+  return response.items ?? [];
 };
 
 /**
@@ -137,9 +110,9 @@ export const listEvents = async (
 ): Promise<k8s.CoreV1Event[]> => {
   const api = getK8sApi(options);
   const response = options.namespace
-    ? await api.listNamespacedEvent(options.namespace, undefined, undefined, undefined, undefined, options.labelSelector)
-    : await api.listEventForAllNamespaces(undefined, undefined, undefined, options.labelSelector);
-  return items<k8s.CoreV1Event>(response);
+    ? await api.listNamespacedEvent({ namespace: options.namespace, labelSelector: options.labelSelector })
+    : await api.listEventForAllNamespaces({ labelSelector: options.labelSelector });
+  return response.items ?? [];
 };
 
 /**
@@ -157,7 +130,7 @@ export const readEndpoints = async (
 ): Promise<k8s.V1Endpoints | undefined> => {
   const api = getK8sApi(options);
   try {
-    return unwrap(await api.readNamespacedEndpoints(name, namespace));
+    return await api.readNamespacedEndpoints({ name, namespace });
   } catch (error) {
     if (isNotFoundError(error)) {
       return undefined;
@@ -182,8 +155,8 @@ export const readPodLog = async (
 ): Promise<string> => {
   const api = getK8sApi(options);
   try {
-    const response = await api.readNamespacedPodLog(name, namespace, container, undefined, undefined, undefined, undefined, undefined, undefined, 100);
-    return typeof response === 'string' ? response : (response as any).body ?? '';
+    const response = await api.readNamespacedPodLog({ name, namespace, container, tailLines: 100 });
+    return typeof response === 'string' ? response : '';
   } catch {
     return '';
   }
@@ -201,9 +174,9 @@ export const listDeployments = async (
 ): Promise<k8s.V1Deployment[]> => {
   const api = getAppsApi(options);
   const response = options.namespace
-    ? await api.listNamespacedDeployment(options.namespace, undefined, undefined, undefined, undefined, options.labelSelector)
-    : await api.listDeploymentForAllNamespaces(undefined, undefined, undefined, options.labelSelector);
-  return items<k8s.V1Deployment>(response);
+    ? await api.listNamespacedDeployment({ namespace: options.namespace, labelSelector: options.labelSelector })
+    : await api.listDeploymentForAllNamespaces({ labelSelector: options.labelSelector });
+  return response.items ?? [];
 };
 
 /**
@@ -216,9 +189,9 @@ export const listReplicaSets = async (
 ): Promise<k8s.V1ReplicaSet[]> => {
   const api = getAppsApi(options);
   const response = options.namespace
-    ? await api.listNamespacedReplicaSet(options.namespace, undefined, undefined, undefined, undefined, options.labelSelector)
-    : await api.listReplicaSetForAllNamespaces(undefined, undefined, undefined, options.labelSelector);
-  return items<k8s.V1ReplicaSet>(response);
+    ? await api.listNamespacedReplicaSet({ namespace: options.namespace, labelSelector: options.labelSelector })
+    : await api.listReplicaSetForAllNamespaces({ labelSelector: options.labelSelector });
+  return response.items ?? [];
 };
 
 /**
@@ -231,9 +204,9 @@ export const listStatefulSets = async (
 ): Promise<k8s.V1StatefulSet[]> => {
   const api = getAppsApi(options);
   const response = options.namespace
-    ? await api.listNamespacedStatefulSet(options.namespace, undefined, undefined, undefined, undefined, options.labelSelector)
-    : await api.listStatefulSetForAllNamespaces(undefined, undefined, undefined, options.labelSelector);
-  return items<k8s.V1StatefulSet>(response);
+    ? await api.listNamespacedStatefulSet({ namespace: options.namespace, labelSelector: options.labelSelector })
+    : await api.listStatefulSetForAllNamespaces({ labelSelector: options.labelSelector });
+  return response.items ?? [];
 };
 
 /**
@@ -246,9 +219,9 @@ export const listDaemonSets = async (
 ): Promise<k8s.V1DaemonSet[]> => {
   const api = getAppsApi(options);
   const response = options.namespace
-    ? await api.listNamespacedDaemonSet(options.namespace, undefined, undefined, undefined, undefined, options.labelSelector)
-    : await api.listDaemonSetForAllNamespaces(undefined, undefined, undefined, options.labelSelector);
-  return items<k8s.V1DaemonSet>(response);
+    ? await api.listNamespacedDaemonSet({ namespace: options.namespace, labelSelector: options.labelSelector })
+    : await api.listDaemonSetForAllNamespaces({ labelSelector: options.labelSelector });
+  return response.items ?? [];
 };
 
 // ─── Batch V1 Resources ─────────────────────────────────────────────
@@ -263,9 +236,9 @@ export const listJobs = async (
 ): Promise<k8s.V1Job[]> => {
   const api = getBatchApi(options);
   const response = options.namespace
-    ? await api.listNamespacedJob(options.namespace, undefined, undefined, undefined, undefined, options.labelSelector)
-    : await api.listJobForAllNamespaces(undefined, undefined, undefined, options.labelSelector);
-  return items<k8s.V1Job>(response);
+    ? await api.listNamespacedJob({ namespace: options.namespace, labelSelector: options.labelSelector })
+    : await api.listJobForAllNamespaces({ labelSelector: options.labelSelector });
+  return response.items ?? [];
 };
 
 /**
@@ -278,9 +251,9 @@ export const listCronJobs = async (
 ): Promise<k8s.V1CronJob[]> => {
   const api = getBatchApi(options);
   const response = options.namespace
-    ? await api.listNamespacedCronJob(options.namespace, undefined, undefined, undefined, undefined, options.labelSelector)
-    : await api.listCronJobForAllNamespaces(undefined, undefined, undefined, options.labelSelector);
-  return items<k8s.V1CronJob>(response);
+    ? await api.listNamespacedCronJob({ namespace: options.namespace, labelSelector: options.labelSelector })
+    : await api.listCronJobForAllNamespaces({ labelSelector: options.labelSelector });
+  return response.items ?? [];
 };
 
 // ─── Networking V1 Resources ────────────────────────────────────────
@@ -295,9 +268,9 @@ export const listIngresses = async (
 ): Promise<k8s.V1Ingress[]> => {
   const api = getNetworkingApi(options);
   const response = options.namespace
-    ? await api.listNamespacedIngress(options.namespace, undefined, undefined, undefined, undefined, options.labelSelector)
-    : await api.listIngressForAllNamespaces(undefined, undefined, undefined, options.labelSelector);
-  return items<k8s.V1Ingress>(response);
+    ? await api.listNamespacedIngress({ namespace: options.namespace, labelSelector: options.labelSelector })
+    : await api.listIngressForAllNamespaces({ labelSelector: options.labelSelector });
+  return response.items ?? [];
 };
 
 /**
@@ -310,9 +283,9 @@ export const listNetworkPolicies = async (
 ): Promise<k8s.V1NetworkPolicy[]> => {
   const api = getNetworkingApi(options);
   const response = options.namespace
-    ? await api.listNamespacedNetworkPolicy(options.namespace, undefined, undefined, undefined, undefined, options.labelSelector)
-    : await api.listNetworkPolicyForAllNamespaces(undefined, undefined, undefined, options.labelSelector);
-  return items<k8s.V1NetworkPolicy>(response);
+    ? await api.listNamespacedNetworkPolicy({ namespace: options.namespace, labelSelector: options.labelSelector })
+    : await api.listNetworkPolicyForAllNamespaces({ labelSelector: options.labelSelector });
+  return response.items ?? [];
 };
 
 // ─── Autoscaling V2 Resources ───────────────────────────────────────
@@ -327,9 +300,9 @@ export const listHPAs = async (
 ): Promise<k8s.V2HorizontalPodAutoscaler[]> => {
   const api = getAutoscalingApi(options);
   const response = options.namespace
-    ? await api.listNamespacedHorizontalPodAutoscaler(options.namespace, undefined, undefined, undefined, undefined, options.labelSelector)
-    : await api.listHorizontalPodAutoscalerForAllNamespaces(undefined, undefined, undefined, options.labelSelector);
-  return items<k8s.V2HorizontalPodAutoscaler>(response);
+    ? await api.listNamespacedHorizontalPodAutoscaler({ namespace: options.namespace, labelSelector: options.labelSelector })
+    : await api.listHorizontalPodAutoscalerForAllNamespaces({ labelSelector: options.labelSelector });
+  return response.items ?? [];
 };
 
 // ─── Policy V1 Resources ────────────────────────────────────────────
@@ -344,9 +317,9 @@ export const listPDBs = async (
 ): Promise<k8s.V1PodDisruptionBudget[]> => {
   const api = getPolicyApi(options);
   const response = options.namespace
-    ? await api.listNamespacedPodDisruptionBudget(options.namespace, undefined, undefined, undefined, undefined, options.labelSelector)
-    : await api.listPodDisruptionBudgetForAllNamespaces(undefined, undefined, undefined, options.labelSelector);
-  return items<k8s.V1PodDisruptionBudget>(response);
+    ? await api.listNamespacedPodDisruptionBudget({ namespace: options.namespace, labelSelector: options.labelSelector })
+    : await api.listPodDisruptionBudgetForAllNamespaces({ labelSelector: options.labelSelector });
+  return response.items ?? [];
 };
 
 // ─── Storage V1 Resources ───────────────────────────────────────────
@@ -360,8 +333,8 @@ export const listStorageClasses = async (
   options: KubernetesResourceOptions = {},
 ): Promise<k8s.V1StorageClass[]> => {
   const api = getStorageApi(options);
-  const response = await api.listStorageClass(undefined, undefined, undefined, options.labelSelector);
-  return items<k8s.V1StorageClass>(response);
+  const response = await api.listStorageClass({ labelSelector: options.labelSelector });
+  return response.items ?? [];
 };
 
 // ─── Gateway API (Custom Resources) ────────────────────────────────
@@ -383,9 +356,9 @@ const listGatewayResources = async (
   const api = getCustomObjectsApi(options);
   try {
     const response = options.namespace
-      ? await api.listNamespacedCustomObject(GATEWAY_API_GROUP, GATEWAY_API_VERSION, options.namespace, plural)
-      : await api.listClusterCustomObject(GATEWAY_API_GROUP, GATEWAY_API_VERSION, plural);
-    return (unwrap(response) as any).items ?? [];
+      ? await api.listNamespacedCustomObject({ group: GATEWAY_API_GROUP, version: GATEWAY_API_VERSION, namespace: options.namespace, plural })
+      : await api.listClusterCustomObject({ group: GATEWAY_API_GROUP, version: GATEWAY_API_VERSION, plural });
+    return (response as any)?.items ?? [];
   } catch (error) {
     if (isNotFoundError(error)) return [];
     throw error;

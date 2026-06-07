@@ -1,32 +1,7 @@
-// import { Command } from 'commander';
-// import { logger } from '../utils/logger';
-// import { createSpinner } from '../ui/spinner';
-
-// export const registerLogsCommand = (program: Command) => {
-//   program
-//     .command('logs <name>')
-//     .description('Show logs for a container or pod')
-//     .action(async (name) => {
-//       const spinner = createSpinner(`Fetching logs for ${name}...`).start();
-//       try {
-//         // TODO: Implement actual log fetching logic
-//         spinner.stop(`Logs for ${name} fetched`);
-//         logger.info(`Showing logs for ${name}...`);
-//       } catch (error) {
-//         const errorMessage = (error as Error).message;
-//         spinner.fail(`Failed to fetch logs for ${name}: ${errorMessage}`);
-//         logger.error(`Failed to fetch logs for ${name}: ${errorMessage}`, error);
-//         throw error;
-//       }
-//     });
-// };
-
-
-// updated
-
 import { Command } from 'commander';
 import { getDockerClient } from '../docker/client';
 import { getK8sApi } from '../kubernetes/client';
+import type * as k8s from '@kubernetes/client-node';
 import { logger } from '../utils/logger';
 import { createSpinner } from '../ui/spinner';
 
@@ -35,6 +10,11 @@ import { createSpinner } from '../ui/spinner';
 const printStream = (value: unknown): void =>
   void process.stdout.write(String(value));
 
+/**
+ * Fetches and displays logs for a container or pod by querying Docker or Kubernetes.
+ * @param name A container ID prefix, container name, or pod name.
+ * @returns A promise that resolves when the logs have been fetched and output.
+ */
 export const showLogs = async (name: string): Promise<void> => {
   if (!name?.trim()) {
     logger.error?.('A container ID prefix, container name, or pod name is required.');
@@ -66,7 +46,7 @@ export const showLogs = async (name: string): Promise<void> => {
     }
   } catch (error) {
     // ✅ CodeRabbit (Minor): log why Docker failed instead of swallowing silently
-    logger.debug?.(
+    logger.warn?.(
       `Docker unavailable, trying Kubernetes: ${
         error instanceof Error ? error.message : String(error)
       }`,
@@ -77,7 +57,7 @@ export const showLogs = async (name: string): Promise<void> => {
   try {
     const api = getK8sApi();
     const pods = await api.listPodForAllNamespaces();
-    const pod = pods.body.items.find((item) => item.metadata?.name === name);
+    const pod = (pods.items ?? []).find((item: k8s.V1Pod) => item.metadata?.name === name);
 
     if (!pod?.metadata?.name || !pod.metadata.namespace) {
       spinner.stop();
@@ -95,7 +75,7 @@ export const showLogs = async (name: string): Promise<void> => {
     });
 
     spinner.stop();
-    printStream(response.body);
+    printStream(response);
   } catch (error) {
     spinner.stop();
     const message = error instanceof Error ? error.message : String(error);
@@ -103,6 +83,10 @@ export const showLogs = async (name: string): Promise<void> => {
   }
 };
 
+/**
+ * Registers the logs CLI command on the Commander program.
+ * @param program Commander program instance.
+ */
 export const registerLogsCommand = (program: Command): void => {
   program
     .command('logs <name>')

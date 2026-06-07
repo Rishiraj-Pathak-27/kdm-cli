@@ -89,15 +89,16 @@ const handleEmailSetup = async () => {
   setConfig('email_port', parseInt(portStr, 10));
   setConfig('email_user', user);
   setConfig('email_to', to);
-  if (password) {
-    setConfig('email_password', password);
-  }
   setConfig('notification_service', 'email');
 
   console.log(chalk.dim('  Set the SMTP password via the KDM_SMTP_PASSWORD environment variable.'));
   console.log(chalk.green('\n✓ Email SMTP configured.'));
 };
 
+/**
+ * Registers the config CLI command group and subcommands on the Commander program.
+ * @param program Commander program instance.
+ */
 export const registerConfigCommand = (program: Command) => {
   const config = program.command('config').description('Manage KDM configuration');
 

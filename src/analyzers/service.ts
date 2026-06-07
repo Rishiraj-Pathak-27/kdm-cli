@@ -254,7 +254,6 @@ export const ServiceAnalyzer: Analyzer = {
       kubeconfig: context.kubeconfig,
       kubecontext: context.kubecontext,
       namespace: context.namespace,
-      signal: context.signal,
     });
 
     const podsByNamespace = groupPodsByNamespace(allPods);

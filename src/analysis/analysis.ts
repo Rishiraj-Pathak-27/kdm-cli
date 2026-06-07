@@ -235,6 +235,36 @@ async function explainResults(results: AnalyzerResult[], options: AnalysisOption
   }
 }
 
+/** Parameters for running a single analyzer. */
+interface RunSingleParams {
+  analyzer: Analyzer;
+  context: any;
+  options: AnalysisOptions;
+  results: AnalyzerResult[];
+  errors: string[];
+  stats: AnalysisStats[];
+}
+
+/**
+ * Runs a single analyzer, measures its duration, and collects results, stats, or errors.
+ * @param params Parameter inputs for running the analyzer.
+ */
+async function runSingleAnalyzer(params: RunSingleParams): Promise<void> {
+  try {
+    const { result: analyzerResults, durationMs } = await measureDuration(
+      () => params.analyzer.analyze(params.context),
+    );
+
+    if (params.options.withStats) {
+      params.stats.push({ analyzer: params.analyzer.name, durationMs });
+    }
+
+    params.results.push(...analyzerResults);
+  } catch (err: any) {
+    params.errors.push(`Analyzer ${params.analyzer.name} failed: ${err?.message || String(err)}`);
+  }
+}
+
 /**
  * Executes a full Kubernetes analysis run across selected analyzers in parallel,
  * respecting concurrency limits and monitoring cancellation signals.
@@ -266,19 +296,14 @@ export async function runAnalysis(options: AnalysisOptions): Promise<AnalysisOut
       const currentIndex = index++;
       const analyzer = analyzersToRun[currentIndex];
 
-      try {
-        const { result: analyzerResults, durationMs } = await measureDuration(
-          () => analyzer.analyze(context),
-        );
-
-        if (options.withStats) {
-          stats.push({ analyzer: analyzer.name, durationMs });
-        }
-
-        results.push(...analyzerResults);
-      } catch (err: any) {
-        errors.push(`Analyzer ${analyzer.name} failed: ${err?.message || String(err)}`);
-      }
+      await runSingleAnalyzer({
+        analyzer,
+        context,
+        options,
+        results,
+        errors,
+        stats,
+      });
     }
   });
 

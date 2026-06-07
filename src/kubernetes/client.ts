@@ -185,7 +185,7 @@ export const checkK8sConnection = async (): Promise<{ connected: boolean; podCou
   try {
     const api = getK8sApi();
     const res = await api.listPodForAllNamespaces();
-    const runningPods = res.body.items.filter(pod => pod.status?.phase === 'Running');
+    const runningPods = (res.items ?? []).filter((pod: k8s.V1Pod) => pod.status?.phase === 'Running');
     return {
       connected: true,
       podCount: runningPods.length,
@@ -197,3 +197,4 @@ export const checkK8sConnection = async (): Promise<{ connected: boolean; podCou
     };
   }
 };
+

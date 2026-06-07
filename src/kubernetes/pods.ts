@@ -1,4 +1,5 @@
 import { getK8sApi } from './client';
+import type * as k8s from '@kubernetes/client-node';
 import { triggerAlert } from '../monitor/alerts';
 import { logger } from '../utils/logger';
 
@@ -14,11 +15,11 @@ export const getRunningPods = async (): Promise<PodData[]> => {
   const api = getK8sApi();
   try {
     const res = await api.listPodForAllNamespaces();
-    return res.body.items.map((pod) => {
+    return (res.items ?? []).map((pod: k8s.V1Pod) => {
       const name = pod.metadata?.name || 'Unknown';
       const phase = pod.status?.phase || 'Unknown';
       const containerStatuses = pod.status?.containerStatuses || [];
-      const restarts = containerStatuses.reduce((acc, status) => acc + status.restartCount, 0);
+      const restarts = containerStatuses.reduce((acc: number, status: k8s.V1ContainerStatus) => acc + status.restartCount, 0);
 
       // Check for failures
       let failureReason = '';

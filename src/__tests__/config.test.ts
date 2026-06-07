@@ -171,24 +171,22 @@ describe('config command', () => {
     expect(guideOrder).toBeLessThan(firstInputOrder());
   });
 
-  it('should save email_password if provided during email setup', async () => {
-  vi.mocked(tui.select).mockResolvedValue('email');
-  vi.mocked(tui.input)
-    .mockResolvedValueOnce('smtp.gmail.com') // host
-    .mockResolvedValueOnce('587')            // port
-    .mockResolvedValueOnce('user@test.com')  // user
-    .mockResolvedValueOnce('to@test.com')    // to
-    .mockResolvedValueOnce('pass123');       // password
+  it('should not save email_password if provided during email setup', async () => {
+    vi.mocked(tui.select).mockResolvedValue('email');
+    vi.mocked(tui.input)
+      .mockResolvedValueOnce('smtp.gmail.com') // host
+      .mockResolvedValueOnce('587')            // port
+      .mockResolvedValueOnce('user@test.com')  // user
+      .mockResolvedValueOnce('to@test.com')    // to
+      .mockResolvedValueOnce('pass123');       // password
 
-  await program.parseAsync(['node', 'test', 'config', 'setup']);
+    await program.parseAsync(['node', 'test', 'config', 'setup']);
 
-  // Find the call that passed 'email_password' instead of assuming index
-  const passwordCall = vi.mocked(configUtils.setConfig).mock.calls.find(
-    call => call[0] === 'email_password'
-  );
-  expect(passwordCall).toBeDefined();
-  expect(passwordCall?.[1]).toBe('pass123');
-});
+    const passwordCall = vi.mocked(configUtils.setConfig).mock.calls.find(
+      (call) => call[0] === 'email_password',
+    );
+    expect(passwordCall).toBeUndefined();
+  });
 
 it('should require an SMTP host during email setup and validate optional SMTP password', async () => {
   vi.mocked(tui.select).mockResolvedValue('email');
