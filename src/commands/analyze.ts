@@ -29,6 +29,57 @@ const parseOutput = (output: string): AnalysisOptions['output'] => {
  * Registers the `analyze` command and its options on the Commander program.
  * @param program Commander program instance.
  */
+/**
+ * Handler for the analyze CLI command execution.
+ * @param options CLI parsed options configuration.
+ */
+async function handleAnalyze(options: any): Promise<void> {
+  let output: AnalysisOptions['output'] = 'text';
+  let spinner: ReturnType<typeof createSpinner> | null = null;
+
+  const abortController = new AbortController();
+  const onSigint = () => {
+    abortController.abort();
+    spinner?.fail('Analysis cancelled');
+    process.exitCode = 130;
+  };
+  process.on('SIGINT', onSigint);
+
+  try {
+    output = parseOutput(options.output);
+    spinner = output === 'json' ? null : createSpinner('Analyzing Kubernetes resources...').start();
+    const result = await runAnalysis({
+      filters: options.filter.length ? options.filter : undefined,
+      namespace: options.namespace,
+      labelSelector: options.selector,
+      output,
+      maxConcurrency: Number.parseInt(options.maxConcurrency, 10),
+      withStats: Boolean(options.withStat),
+      withDocs: Boolean(options.withDoc),
+      kubeconfig: options.kubeconfig,
+      kubecontext: options.kubecontext,
+      signal: abortController.signal,
+    });
+
+    spinner?.stop('Analysis complete');
+    console.log(output === 'json' ? formatJsonOutput(result) : formatTextOutput(result));
+  } catch (error) {
+    spinner?.fail(`Analysis failed: ${(error as Error).message}`);
+    if (output === 'json') {
+      logger.error(JSON.stringify({ error: (error as Error).message }, null, 2));
+    } else {
+      logger.error(chalk.red(`Analysis failed: ${(error as Error).message}`));
+    }
+    process.exitCode = 1;
+  } finally {
+    process.removeListener('SIGINT', onSigint);
+  }
+}
+
+/**
+ * Registers the `analyze` command and its options on the Commander program.
+ * @param program Commander program instance.
+ */
 export const registerAnalyzeCommand = (program: Command) => {
   program
     .command('analyze')
@@ -43,46 +94,5 @@ export const registerAnalyzeCommand = (program: Command) => {
     .option('--with-doc', 'Reserve Kubernetes documentation lookup for analyzer output')
     .option('--kubeconfig <path>', 'Path to kubeconfig file')
     .option('--kubecontext <context>', 'Kubernetes context to use')
-    .action(async (options) => {
-      let output: AnalysisOptions['output'] = 'text';
-      let spinner: ReturnType<typeof createSpinner> | null = null;
-
-      const abortController = new AbortController();
-      const onSigint = () => {
-        abortController.abort();
-        spinner?.fail('Analysis cancelled');
-        process.exitCode = 130;
-      };
-      process.on('SIGINT', onSigint);
-
-      try {
-        output = parseOutput(options.output);
-        spinner = output === 'json' ? null : createSpinner('Analyzing Kubernetes resources...').start();
-        const result = await runAnalysis({
-          filters: options.filter.length ? options.filter : undefined,
-          namespace: options.namespace,
-          labelSelector: options.selector,
-          output,
-          maxConcurrency: Number.parseInt(options.maxConcurrency, 10),
-          withStats: Boolean(options.withStat),
-          withDocs: Boolean(options.withDoc),
-          kubeconfig: options.kubeconfig,
-          kubecontext: options.kubecontext,
-          signal: abortController.signal,
-        });
-
-        spinner?.stop('Analysis complete');
-        console.log(output === 'json' ? formatJsonOutput(result) : formatTextOutput(result));
-      } catch (error) {
-        spinner?.fail(`Analysis failed: ${(error as Error).message}`);
-        if (output === 'json') {
-          logger.error(JSON.stringify({ error: (error as Error).message }, null, 2));
-        } else {
-          logger.error(chalk.red(`Analysis failed: ${(error as Error).message}`));
-        }
-        process.exitCode = 1;
-      } finally {
-        process.removeListener('SIGINT', onSigint);
-      }
-    });
+    .action(handleAnalyze);
 };

@@ -51,31 +51,38 @@ const checkPodScheduling = (pod: k8s.V1Pod): Failure[] => {
 };
 
 /**
+ * Validates the state of a single container status, checking for waiting failures,
+ * readiness, and restart count threshold breaches.
+ * @param status The container status object.
+ * @returns Array of failures found.
+ */
+const checkSingleContainerState = (status: k8s.V1ContainerStatus): Failure[] => {
+  const failures: Failure[] = [];
+  const waiting = status.state?.waiting;
+  if (waiting?.reason && WAITING_FAILURE_REASONS.has(waiting.reason)) {
+    failures.push({
+      text: `Container ${status.name} is waiting in ${waiting.reason}${waiting.message ? `: ${waiting.message}` : ''}`,
+    });
+  }
+
+  if (!status.ready) {
+    failures.push({ text: `Container ${status.name} is not ready` });
+  }
+
+  if ((status.restartCount ?? 0) > RESTART_WARNING_THRESHOLD) {
+    failures.push({ text: `Container ${status.name} restarted ${status.restartCount} times` });
+  }
+  return failures;
+};
+
+/**
  * Validates states of containers inside a pod, assessing waiting statuses, readiness,
  * and high restart counts.
  * @param pod The Pod object.
  * @returns Array of container validation failures.
  */
-const checkContainerStates = (pod: k8s.V1Pod): Failure[] => {
-  const failures: Failure[] = [];
-  for (const status of pod.status?.containerStatuses ?? []) {
-    const waiting = status.state?.waiting;
-    if (waiting?.reason && WAITING_FAILURE_REASONS.has(waiting.reason)) {
-      failures.push({
-        text: `Container ${status.name} is waiting in ${waiting.reason}${waiting.message ? `: ${waiting.message}` : ''}`,
-      });
-    }
-
-    if (!status.ready) {
-      failures.push({ text: `Container ${status.name} is not ready` });
-    }
-
-    if ((status.restartCount ?? 0) > RESTART_WARNING_THRESHOLD) {
-      failures.push({ text: `Container ${status.name} restarted ${status.restartCount} times` });
-    }
-  }
-  return failures;
-};
+const checkContainerStates = (pod: k8s.V1Pod): Failure[] =>
+  (pod.status?.containerStatuses ?? []).flatMap(checkSingleContainerState);
 
 /**
  * Aggregates all Pod related validation checks: phase, scheduling, and container states.

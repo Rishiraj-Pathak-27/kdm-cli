@@ -48,6 +48,64 @@ const checkEndpoints = (endpoints: k8s.V1Endpoints | undefined): Failure[] => {
 };
 
 /**
+ * Helper to determine if a string port is resolved in matching pods.
+ * @param targetPort The port name.
+ * @param pods The list of matching pods.
+ * @returns True if resolved, false otherwise.
+ */
+const isStringPortResolved = (targetPort: string, pods: k8s.V1Pod[]): boolean =>
+  pods.some((pod) =>
+    pod.spec?.containers?.some((container) =>
+      container.ports?.some((cp) => cp.name === targetPort),
+    ),
+  );
+
+/**
+ * Helper to determine if a numeric port is resolved in matching pods.
+ * @param targetPort The port number.
+ * @param pods The list of matching pods.
+ * @returns True if resolved, false otherwise.
+ */
+const isNumberPortResolved = (targetPort: number, pods: k8s.V1Pod[]): boolean =>
+  pods.some((pod) =>
+    pod.spec?.containers?.some((container) =>
+      container.ports?.some((cp) => cp.containerPort === targetPort),
+    ),
+  );
+
+/**
+ * Validates a single Service port mapping.
+ * @param port The Service port to validate.
+ * @param matchingPods Pods that match the service's selector.
+ * @returns Array of failures found.
+ */
+const checkSinglePort = (
+  port: k8s.V1ServicePort,
+  matchingPods: k8s.V1Pod[],
+): Failure[] => {
+  const targetPort = port.targetPort ?? port.port;
+
+  if (typeof targetPort === 'string') {
+    if (!isStringPortResolved(targetPort, matchingPods)) {
+      return [{
+        text: `Service target port '${targetPort}' appears unresolved (no matching container port name found in pods)`,
+      }];
+    }
+  } else if (typeof targetPort === 'number') {
+    const hasDeclaredPorts = matchingPods.some((pod) =>
+      pod.spec?.containers?.some((container) => (container.ports?.length ?? 0) > 0),
+    );
+    if (hasDeclaredPorts && !isNumberPortResolved(targetPort, matchingPods)) {
+      return [{
+        text: `Service target port ${targetPort} appears unresolved (no matching containerPort found in pods)`,
+      }];
+    }
+  }
+
+  return [];
+};
+
+/**
  * Checks if all ports declared by a Service can map to exposed ports of matching backend Pods.
  * Checks string port names and numeric port numbers.
  * @param service The Service object.
@@ -58,43 +116,21 @@ const checkTargetPorts = (
   service: k8s.V1Service,
   matchingPods: k8s.V1Pod[],
 ): Failure[] => {
-  const failures: Failure[] = [];
-  const ports = service.spec?.ports ?? [];
+  return (service.spec?.ports ?? []).flatMap((port) => checkSinglePort(port, matchingPods));
+};
 
-  for (const port of ports) {
-    const targetPort = port.targetPort ?? port.port;
-
-    if (typeof targetPort === 'string') {
-      const resolved = matchingPods.some((pod) =>
-        pod.spec?.containers?.some((container) =>
-          container.ports?.some((cp) => cp.name === targetPort),
-        ),
-      );
-      if (!resolved) {
-        failures.push({
-          text: `Service target port '${targetPort}' appears unresolved (no matching container port name found in pods)`,
-        });
-      }
-    } else if (typeof targetPort === 'number') {
-      const hasDeclaredPorts = matchingPods.some((pod) =>
-        pod.spec?.containers?.some((container) => (container.ports?.length ?? 0) > 0),
-      );
-      if (hasDeclaredPorts) {
-        const resolved = matchingPods.some((pod) =>
-          pod.spec?.containers?.some((container) =>
-            container.ports?.some((cp) => cp.containerPort === targetPort),
-          ),
-        );
-        if (!resolved) {
-          failures.push({
-            text: `Service target port ${targetPort} appears unresolved (no matching containerPort found in pods)`,
-          });
-        }
-      }
-    }
-  }
-
-  return failures;
+/**
+ * Filters a list of pods in-memory to find those matching a key-value selector.
+ * @param pods List of pods to filter.
+ * @param selector Key-value selector map.
+ * @returns Filtered pods matching the selector.
+ */
+const filterPodsBySelector = (pods: k8s.V1Pod[], selector: Record<string, string>): k8s.V1Pod[] => {
+  const selectorEntries = Object.entries(selector);
+  return pods.filter((pod) => {
+    const labels = pod.metadata?.labels ?? {};
+    return selectorEntries.every(([key, val]) => labels[key] === val);
+  });
 };
 
 /**
@@ -116,25 +152,67 @@ const getServiceFailures = async (
   const failures: Failure[] = [];
 
   const selector = service.spec?.selector;
+  const hasSelector = selector && Object.keys(selector).length > 0;
   let matchingPods: k8s.V1Pod[] = [];
-  if (selector && Object.keys(selector).length > 0) {
-    const selectorStr = labelsToSelector(selector);
-    const selectorEntries = Object.entries(selector);
-    matchingPods = podsInNamespace.filter((pod) => {
-      const labels = pod.metadata?.labels ?? {};
-      return selectorEntries.every(([key, val]) => labels[key] === val);
-    });
+
+  if (hasSelector) {
+    const selectorStr = labelsToSelector(selector!);
+    matchingPods = filterPodsBySelector(podsInNamespace, selector!);
     failures.push(...checkSelectorMatch(matchingPods, selectorStr));
   }
 
   const endpoints = await readEndpoints(name, namespace, context);
   failures.push(...checkEndpoints(endpoints));
 
-  if (selector && Object.keys(selector).length > 0 && matchingPods.length > 0) {
+  if (hasSelector && matchingPods.length > 0) {
     failures.push(...checkTargetPorts(service, matchingPods));
   }
 
   return failures;
+};
+
+/**
+ * Groups pods by their namespace for faster lookup.
+ * @param pods List of pods.
+ * @returns Map of namespace to pods list.
+ */
+const groupPodsByNamespace = (pods: k8s.V1Pod[]): Map<string, k8s.V1Pod[]> => {
+  const podsByNamespace = new Map<string, k8s.V1Pod[]>();
+  for (const pod of pods) {
+    const ns = pod.metadata?.namespace ?? 'default';
+    let list = podsByNamespace.get(ns);
+    if (!list) {
+      list = [];
+      podsByNamespace.set(ns, list);
+    }
+    list.push(pod);
+  }
+  return podsByNamespace;
+};
+
+/**
+ * Processes Promise.allSettled results to build AnalyzerResults.
+ * @param settled Settled analysis promises.
+ * @returns Aggregated AnalyzerResults list.
+ */
+const processSettledResults = (
+  settled: PromiseSettledResult<AnalyzerResult | null>[],
+): AnalyzerResult[] => {
+  const results: AnalyzerResult[] = [];
+  for (const result of settled) {
+    if (result.status === 'fulfilled') {
+      if (result.value !== null) {
+        results.push(result.value);
+      }
+    } else {
+      results.push({
+        kind: 'Service',
+        name: 'unknown-service',
+        errors: [{ text: `Service analysis failed: ${result.reason?.message || String(result.reason)}` }],
+      });
+    }
+  }
+  return results;
 };
 
 /**
@@ -151,14 +229,7 @@ export const ServiceAnalyzer: Analyzer = {
       signal: context.signal,
     });
 
-    const podsByNamespace = new Map<string, k8s.V1Pod[]>();
-    for (const pod of allPods) {
-      const ns = pod.metadata?.namespace ?? 'default';
-      if (!podsByNamespace.has(ns)) {
-        podsByNamespace.set(ns, []);
-      }
-      podsByNamespace.get(ns)!.push(pod);
-    }
+    const podsByNamespace = groupPodsByNamespace(allPods);
 
     const settled = await Promise.allSettled(
       services.map(async (service) => {
@@ -175,18 +246,6 @@ export const ServiceAnalyzer: Analyzer = {
       }),
     );
 
-    const results: AnalyzerResult[] = [];
-    for (const result of settled) {
-      if (result.status === 'fulfilled' && result.value !== null) {
-        results.push(result.value);
-      } else if (result.status === 'rejected') {
-        results.push({
-          kind: 'Service',
-          name: 'unknown-service',
-          errors: [{ text: `Service analysis failed: ${result.reason?.message || String(result.reason)}` }],
-        });
-      }
-    }
-    return results;
+    return processSettledResults(settled);
   },
 };
