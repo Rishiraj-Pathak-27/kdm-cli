@@ -15,11 +15,11 @@ const deploymentName = (deployment: k8s.V1Deployment) => deployment.metadata?.na
 const deploymentNamespace = (deployment: k8s.V1Deployment) => deployment.metadata?.namespace ?? 'default';
 
 /**
- * Evaluates the Deployment specs and status, checks for replica availability and rollout progress delays.
+ * Checks deployment replica status, comparing desired, available, and unavailable counts.
  * @param deployment The Deployment object.
  * @returns Array of failures found.
  */
-const getDeploymentFailures = (deployment: k8s.V1Deployment): Failure[] => {
+const checkDeploymentReplicas = (deployment: k8s.V1Deployment): Failure[] => {
   const failures: Failure[] = [];
   const desired = deployment.spec?.replicas ?? 1;
   const available = deployment.status?.availableReplicas ?? 0;
@@ -32,7 +32,16 @@ const getDeploymentFailures = (deployment: k8s.V1Deployment): Failure[] => {
   } else if (unavailable > 0) {
     failures.push({ text: `Deployment has ${unavailable} unavailable replica${unavailable === 1 ? '' : 's'}` });
   }
+  return failures;
+};
 
+/**
+ * Checks deployment status conditions, focusing on rollout deadlines and failed status flags.
+ * @param deployment The Deployment object.
+ * @returns Array of failures found.
+ */
+const checkDeploymentConditions = (deployment: k8s.V1Deployment): Failure[] => {
+  const failures: Failure[] = [];
   for (const condition of deployment.status?.conditions ?? []) {
     if (condition.type === 'Progressing' && condition.reason === 'ProgressDeadlineExceeded') {
       failures.push({
@@ -43,9 +52,18 @@ const getDeploymentFailures = (deployment: k8s.V1Deployment): Failure[] => {
       failures.push({ text: `Deployment condition ${condition.type} is False: ${condition.message}` });
     }
   }
-
   return failures;
 };
+
+/**
+ * Evaluates the Deployment specs and status, checks for replica availability and rollout progress delays.
+ * @param deployment The Deployment object.
+ * @returns Array of failures found.
+ */
+const getDeploymentFailures = (deployment: k8s.V1Deployment): Failure[] => [
+  ...checkDeploymentReplicas(deployment),
+  ...checkDeploymentConditions(deployment),
+];
 
 /**
  * Analyzer implementation focused on Kubernetes Deployments.

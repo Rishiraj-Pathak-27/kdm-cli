@@ -74,6 +74,45 @@ const isNumberPortResolved = (targetPort: number, pods: k8s.V1Pod[]): boolean =>
   );
 
 /**
+ * Checks if a Service string-based targetPort resolves to a named container port in pods.
+ * @param targetPort The port name.
+ * @param matchingPods Pods that match the service's selector.
+ * @returns Array of failures found.
+ */
+const checkStringPort = (
+  targetPort: string,
+  matchingPods: k8s.V1Pod[],
+): Failure[] => {
+  if (!isStringPortResolved(targetPort, matchingPods)) {
+    return [{
+      text: `Service target port '${targetPort}' appears unresolved (no matching container port name found in pods)`,
+    }];
+  }
+  return [];
+};
+
+/**
+ * Checks if a Service numeric targetPort is declared and resolved in matching pods.
+ * @param targetPort The port number.
+ * @param matchingPods Pods that match the service's selector.
+ * @returns Array of failures found.
+ */
+const checkNumericPort = (
+  targetPort: number,
+  matchingPods: k8s.V1Pod[],
+): Failure[] => {
+  const hasDeclaredPorts = matchingPods.some((pod) =>
+    pod.spec?.containers?.some((container) => (container.ports?.length ?? 0) > 0),
+  );
+  if (hasDeclaredPorts && !isNumberPortResolved(targetPort, matchingPods)) {
+    return [{
+      text: `Service target port ${targetPort} appears unresolved (no matching containerPort found in pods)`,
+    }];
+  }
+  return [];
+};
+
+/**
  * Validates a single Service port mapping.
  * @param port The Service port to validate.
  * @param matchingPods Pods that match the service's selector.
@@ -86,20 +125,9 @@ const checkSinglePort = (
   const targetPort = port.targetPort ?? port.port;
 
   if (typeof targetPort === 'string') {
-    if (!isStringPortResolved(targetPort, matchingPods)) {
-      return [{
-        text: `Service target port '${targetPort}' appears unresolved (no matching container port name found in pods)`,
-      }];
-    }
+    return checkStringPort(targetPort, matchingPods);
   } else if (typeof targetPort === 'number') {
-    const hasDeclaredPorts = matchingPods.some((pod) =>
-      pod.spec?.containers?.some((container) => (container.ports?.length ?? 0) > 0),
-    );
-    if (hasDeclaredPorts && !isNumberPortResolved(targetPort, matchingPods)) {
-      return [{
-        text: `Service target port ${targetPort} appears unresolved (no matching containerPort found in pods)`,
-      }];
-    }
+    return checkNumericPort(targetPort, matchingPods);
   }
 
   return [];
