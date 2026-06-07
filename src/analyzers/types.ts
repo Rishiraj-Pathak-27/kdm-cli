@@ -6,6 +6,8 @@ export interface Analyzer {
 export interface AnalyzerContext {
   namespace?: string;
   labelSelector?: string;
+  kubeconfig?: string;
+  kubecontext?: string;
   withDocs?: boolean;
 }
 

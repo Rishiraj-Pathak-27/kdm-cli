@@ -37,6 +37,17 @@ vi.mock('conf', () => {
   };
 });
 
+vi.mock('../kubernetes/resources', () => ({
+  listPods: vi.fn(async () => []),
+  listDeployments: vi.fn(async () => []),
+  listServices: vi.fn(async () => []),
+  listPersistentVolumeClaims: vi.fn(async () => []),
+  listNodes: vi.fn(async () => []),
+  readEndpoints: vi.fn(async () => undefined),
+  labelsToSelector: (labels: Record<string, string> = {}) =>
+    Object.entries(labels).map(([key, value]) => `${key}=${value}`).join(','),
+}));
+
 describe('Analysis Engine', () => {
   beforeEach(() => {
     clearConfig();

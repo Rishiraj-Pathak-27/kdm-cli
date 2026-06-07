@@ -1,4 +1,9 @@
 import { Analyzer } from './types';
+import { PodAnalyzer } from './pod';
+import { DeploymentAnalyzer } from './deployment';
+import { ServiceAnalyzer } from './service';
+import { PersistentVolumeClaimAnalyzer } from './pvc';
+import { NodeAnalyzer } from './node';
 
 class AnalyzerRegistry {
   private analyzers = new Map<string, Analyzer>();
@@ -26,35 +31,17 @@ class AnalyzerRegistry {
 
 export const registry = new AnalyzerRegistry();
 
-// Core no-op placeholder analyzers
-export const PodAnalyzer: Analyzer = {
-  name: 'Pod',
-  analyze: async (_context) => [],
-};
-
-export const DeploymentAnalyzer: Analyzer = {
-  name: 'Deployment',
-  analyze: async (_context) => [],
-};
-
-export const ServiceAnalyzer: Analyzer = {
-  name: 'Service',
-  analyze: async (_context) => [],
-};
-
-export const PersistentVolumeClaimAnalyzer: Analyzer = {
-  name: 'PersistentVolumeClaim',
-  analyze: async (_context) => [],
-};
-
-export const NodeAnalyzer: Analyzer = {
-  name: 'Node',
-  analyze: async (_context) => [],
-};
-
 // Register initial core analyzers
 registry.register(PodAnalyzer);
 registry.register(DeploymentAnalyzer);
 registry.register(ServiceAnalyzer);
 registry.register(PersistentVolumeClaimAnalyzer);
 registry.register(NodeAnalyzer);
+
+export {
+  PodAnalyzer,
+  DeploymentAnalyzer,
+  ServiceAnalyzer,
+  PersistentVolumeClaimAnalyzer,
+  NodeAnalyzer,
+};

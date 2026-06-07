@@ -8,6 +8,7 @@ import { registerHealthCommand } from './health';
 import { registerWatchCommand } from './watch';
 import { registerLogsCommand } from './logs';
 import { registerConfigCommand } from './config';
+import { registerAnalyzeCommand } from './analyze';
 import { logger } from '../utils/logger';
 import { showWelcomeBanner } from '../ui/banner';
 import { createSpinner } from '../ui/spinner';
@@ -24,6 +25,7 @@ registerHealthCommand(program);
 registerWatchCommand(program);
 registerLogsCommand(program);
 registerConfigCommand(program);
+registerAnalyzeCommand(program);
 
 const run = async () => {
   if (!process.argv.slice(2).length) {
@@ -82,5 +84,4 @@ const run = async () => {
 };
 
 run();
-
 

@@ -59,6 +59,8 @@ export async function runAnalysis(options: AnalysisOptions): Promise<AnalysisOut
   const context = {
     namespace: options.namespace,
     labelSelector: options.labelSelector,
+    kubeconfig: options.kubeconfig,
+    kubecontext: options.kubecontext,
     withDocs: options.withDocs,
   };
 
