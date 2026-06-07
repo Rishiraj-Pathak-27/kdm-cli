@@ -9,6 +9,8 @@ import { registerWatchCommand } from './watch';
 import { registerLogsCommand } from './logs';
 import { registerConfigCommand } from './config';
 import { registerAnalyzeCommand } from './analyze';
+import { registerFiltersCommand } from './filters';
+import { registerAuthCommand } from './auth';
 import { logger } from '../utils/logger';
 import { showWelcomeBanner } from '../ui/banner';
 import { createSpinner } from '../ui/spinner';
@@ -26,6 +28,8 @@ registerWatchCommand(program);
 registerLogsCommand(program);
 registerConfigCommand(program);
 registerAnalyzeCommand(program);
+registerFiltersCommand(program);
+registerAuthCommand(program);
 
 const run = async () => {
   if (!process.argv.slice(2).length) {
