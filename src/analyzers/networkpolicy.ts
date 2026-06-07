@@ -3,19 +3,55 @@ import type { Analyzer, AnalyzerContext, AnalyzerResult, Failure } from './types
 import { listNetworkPolicies } from '../kubernetes/resources';
 
 /**
+ * Verifies if matchLabels selector exists and is populated.
+ * @param selector Label selector object.
+ * @returns True if contains at least one match label.
+ */
+const hasMatchLabels = (selector: k8s.V1LabelSelector | undefined): boolean => {
+  if (!selector?.matchLabels) return false;
+  return Object.keys(selector.matchLabels).length > 0;
+};
+
+/**
+ * Verifies if matchExpressions selector exists and is populated.
+ * @param selector Label selector object.
+ * @returns True if contains at least one match expression.
+ */
+const hasMatchExpressions = (selector: k8s.V1LabelSelector | undefined): boolean => {
+  if (!selector?.matchExpressions) return false;
+  return selector.matchExpressions.length > 0;
+};
+
+/**
  * Checks NetworkPolicy for empty or overly broad selectors.
  * @param np The NetworkPolicy object.
  * @returns Array of failures found.
  */
 const checkNetworkPolicySelector = (np: k8s.V1NetworkPolicy): Failure[] => {
   const selector = np.spec?.podSelector;
-  const hasLabels = selector?.matchLabels && Object.keys(selector.matchLabels).length > 0;
-  const hasExpressions = selector?.matchExpressions && selector.matchExpressions.length > 0;
-  if (!hasLabels && !hasExpressions) {
+  if (!hasMatchLabels(selector) && !hasMatchExpressions(selector)) {
     return [{ text: 'NetworkPolicy has an empty podSelector (applies to all pods in namespace)' }];
   }
   return [];
 };
+
+/**
+ * Checks if ingress is blocked on the network policy.
+ * @param np The NetworkPolicy object.
+ * @param types Target policy types.
+ * @returns True if ingress is declared but blocked.
+ */
+const isIngressBlocked = (np: k8s.V1NetworkPolicy, types: string[]): boolean =>
+  types.includes('Ingress') && !np.spec?.ingress?.length;
+
+/**
+ * Checks if egress is blocked on the network policy.
+ * @param np The NetworkPolicy object.
+ * @param types Target policy types.
+ * @returns True if egress is declared but blocked.
+ */
+const isEgressBlocked = (np: k8s.V1NetworkPolicy, types: string[]): boolean =>
+  types.includes('Egress') && !np.spec?.egress?.length;
 
 /**
  * Checks NetworkPolicy for missing ingress and egress rules.
@@ -25,13 +61,11 @@ const checkNetworkPolicySelector = (np: k8s.V1NetworkPolicy): Failure[] => {
 const checkNetworkPolicyRules = (np: k8s.V1NetworkPolicy): Failure[] => {
   const failures: Failure[] = [];
   const types = np.spec?.policyTypes ?? [];
-  const hasIngress = types.includes('Ingress');
-  const hasEgress = types.includes('Egress');
 
-  if (hasIngress && !np.spec?.ingress?.length) {
+  if (isIngressBlocked(np, types)) {
     failures.push({ text: 'NetworkPolicy declares Ingress policy type but has no ingress rules (blocks all ingress)' });
   }
-  if (hasEgress && !np.spec?.egress?.length) {
+  if (isEgressBlocked(np, types)) {
     failures.push({ text: 'NetworkPolicy declares Egress policy type but has no egress rules (blocks all egress)' });
   }
   return failures;

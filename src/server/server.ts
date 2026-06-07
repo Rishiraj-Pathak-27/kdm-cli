@@ -120,12 +120,18 @@ export const routeRequest = (req: any, res: any, options: ServerOptions): void =
   const url = req.url ?? '';
   const method = req.method ?? 'GET';
 
-  if (method === 'GET') {
-    if (url === '/health') return handleHealth(res);
-    if (url === '/filters') return handleFilters(res);
-    if (url === '/config') return handleConfig(res);
-  } else if (method === 'POST') {
-    if (url === '/analyze') return handleAnalyze(req, res, options);
+  const getHandlers: Record<string, (res: any) => void> = {
+    '/health': handleHealth,
+    '/filters': handleFilters,
+    '/config': handleConfig,
+  };
+
+  if (method === 'GET' && url in getHandlers) {
+    return getHandlers[url](res);
+  }
+
+  if (method === 'POST' && url === '/analyze') {
+    return handleAnalyze(req, res, options);
   }
 
   sendJson(res, 404, { error: 'Not found' });
