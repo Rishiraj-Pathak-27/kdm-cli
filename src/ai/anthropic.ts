@@ -2,6 +2,43 @@ import { AIClient } from './types';
 import { AIProviderConfig } from '../config/schema';
 
 /**
+ * Formats the Anthropic URL based on custom base url configurations.
+ * @param baseUrl Configured base URL or undefined.
+ * @returns Formatted messages URL.
+ */
+const formatAnthropicUrl = (baseUrl?: string): string => {
+  const base = baseUrl || 'https://api.anthropic.com/v1/messages';
+  const url = base.replace(/\/$/, '');
+  if (url.endsWith('/v1')) {
+    return `${url}/messages`;
+  }
+  if (!url.includes('/messages')) {
+    return `${url}/messages`;
+  }
+  return url;
+};
+
+/**
+ * Builds the Anthropic payload body.
+ * @param model Model name.
+ * @param prompt Prompt text.
+ * @param temp Temperature.
+ * @param maxTokens MaxTokens.
+ * @returns Payload body object.
+ */
+const buildAnthropicBody = (
+  model: string,
+  prompt: string,
+  temp?: number,
+  maxTokens?: number,
+) => ({
+  model,
+  messages: [{ role: 'user', content: prompt }],
+  max_tokens: maxTokens ?? 2048,
+  temperature: temp ?? 0.7,
+});
+
+/**
  * AI client implementation for querying Anthropic Claude models.
  */
 export class AnthropicAIClient implements AIClient {
@@ -29,19 +66,13 @@ export class AnthropicAIClient implements AIClient {
    * @returns The generated response string.
    */
   async getCompletion(prompt: string): Promise<string> {
-    let url = this.config.baseUrl!;
-    if (url.endsWith('/v1') || url.endsWith('/v1/')) {
-      url = url.replace(/\/$/, '') + '/messages';
-    } else if (!url.includes('/messages')) {
-      url = url.replace(/\/$/, '') + '/messages';
-    }
-
-    const body = {
-      model: this.config.model,
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: this.config.maxTokens ?? 2048,
-      temperature: this.config.temperature ?? 0.7,
-    };
+    const url = formatAnthropicUrl(this.config.baseUrl);
+    const body = buildAnthropicBody(
+      this.config.model,
+      prompt,
+      this.config.temperature,
+      this.config.maxTokens,
+    );
 
     const res = await fetch(url, {
       method: 'POST',

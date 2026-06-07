@@ -14,6 +14,8 @@ We enforce the **Bare Minimum** quality gate profile on PR delta analysis:
 | **Nesting Depth** | Strictly `< 4` levels of indentation | `10.00 / 10.00` |
 | **Bumpy Road Ahead** | Max `1` nested conditional block per function | `10.00 / 10.00` |
 | **Docstring Coverage** | Strictly `> 80%` of functions & modules documented | Green check |
+| **Mean Module Complexity** | Strictly `< 4.0` average cyclomatic complexity per module | Green check |
+| **String-Heavy Arguments** | Strictly `< 39%` of all arguments across a module's functions may be strings | Green check |
 
 ---
 
@@ -90,6 +92,54 @@ CodeScene checks for standard JSDoc/TSDoc blocks on functions and modules.
   1. A clear sentence of what it does.
   2. Description of every `@param`.
   3. Description of the `@returns` type.
+
+### 5. Mean Module Complexity & String-Heavy Arguments
+CodeScene flags modules that have a high average cyclomatic complexity or contain too many string arguments across their functions.
+* **Rule (Mean Complexity)**: Keep the mean cyclomatic complexity across all functions in a module **strictly < 4.0**. Avoid piling too many branch structures into a single file.
+* **Rule (String-Heavy arguments)**: Keep the ratio of primitive string arguments (like `string`, `string[]`, or similar) **strictly < 39%** of all function arguments across a module.
+* **Pattern**: 
+  - Instead of passing multiple primitive parameters (especially strings) to a function, group them into a typed parameter options object.
+  - Inline simple single-use helper functions to keep function count low and reduce unnecessary function parameter overhead.
+
+```typescript
+// ❌ BAD: High primitive string argument density
+const resolveProvider = (name: string, model: string, baseUrl: string, password?: string) => ...
+
+// 🟢 GOOD: Grouped parameter options object (0 primitive string arguments)
+interface ProviderParams {
+  name: string;
+  model: string;
+  baseUrl: string;
+  password?: string;
+}
+const resolveProvider = (params: ProviderParams) => ...
+```
+
+### 6. Code Duplication & Parameterized Testing
+Duplicate logic or structurally identical functions trigger CodeScene warnings, including inside unit tests.
+* **Rule**: Never copy-paste structural logic across test cases.
+* **Pattern**: Use parameterized testing templates (`it.each`) in Vitest to run similar assertions through a single test function body.
+
+```typescript
+// ❌ BAD: Structural code duplication in tests
+it('tests provider A', () => {
+  const result = runTest('A', 'paramA');
+  expect(result).toBe('respA');
+});
+it('tests provider B', () => {
+  const result = runTest('B', 'paramB');
+  expect(result).toBe('respB');
+});
+
+// 🟢 GOOD: Parameterized it.each
+it.each([
+  { name: 'A', param: 'paramA', expected: 'respA' },
+  { name: 'B', param: 'paramB', expected: 'respB' }
+])('tests provider $name', ({ name, param, expected }) => {
+  const result = runTest(name, param);
+  expect(result).toBe(expected);
+});
+```
 
 ---
 

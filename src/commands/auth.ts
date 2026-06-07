@@ -5,6 +5,17 @@ import { type AIProviderConfig } from '../config/schema';
 
 const VALID_BACKENDS = new Set(['openai', 'ollama', 'anthropic', 'noop', 'customrest']);
 
+const DEFAULT_MODELS: Record<string, string> = {
+  openai: 'gpt-4o',
+  anthropic: 'claude-3-5-sonnet-latest',
+  ollama: 'llama3.1',
+};
+
+interface ProviderContext {
+  backend: string;
+  idx: number;
+}
+
 /**
  * Helper to collect multiple custom header flags from the CLI options into an array.
  * @param value The newly passed header.
@@ -12,22 +23,6 @@ const VALID_BACKENDS = new Set(['openai', 'ollama', 'anthropic', 'noop', 'custom
  * @returns Array containing all collected headers.
  */
 const collectHeaders = (value: string, previous: string[]): string[] => [...previous, value];
-
-/**
- * Validates the backend name against the supported list.
- * @param backend The provider backend name.
- * @returns The normalized backend name.
- * @throws Error if backend is invalid.
- */
-const validateBackend = (backend: string): string => {
-  const normalized = backend.toLowerCase();
-  if (!VALID_BACKENDS.has(normalized)) {
-    throw new Error(
-      `Unsupported backend "${backend}". Supported: ${Array.from(VALID_BACKENDS).join(', ')}`,
-    );
-  }
-  return normalized;
-};
 
 /**
  * Parses raw Key=Value header strings into a Record object.
@@ -49,77 +44,119 @@ const parseCustomHeaders = (headers: string[]): Record<string, string> => {
 
 /**
  * Masks secrets/API keys to avoid leaking them in plain text display.
- * @param secret Stored secret key.
+ * @param provider The AI provider configuration.
  * @returns Masked representation.
  */
-const maskSecret = (secret?: string): string => {
+const getMaskedSecret = (provider: AIProviderConfig): string => {
+  const secret = provider.password;
   if (!secret) return '(not set)';
   if (secret.length <= 8) return '********';
   return `${secret.substring(0, 4)}...${secret.substring(secret.length - 4)}`;
 };
 
 /**
- * Resolves default model name for a provider backend if not explicitly provided.
- * @param backend Normalized backend name.
- * @returns The default model name.
+ * Resolves the backend name and its configuration index in the provider list.
+ * Exits with error status if the backend is not configured or unsupported.
+ * @param params Object containing target name and the providers list.
+ * @returns Resolved ProviderContext or null if error occurred.
  */
-const getDefaultModel = (backend: string): string => {
-  if (backend === 'openai') return 'gpt-4o';
-  if (backend === 'anthropic') return 'claude-3-5-sonnet-latest';
-  if (backend === 'ollama') return 'llama3.1';
-  return 'default';
-};
-
-/**
- * Adds a new AI provider to the store.
- * @param options CLI parsed option flags.
- */
-const handleAuthAdd = (options: any): void => {
-  let backend: string;
-  try {
-    backend = validateBackend(options.backend || 'openai');
-  } catch (err: any) {
-    console.error(chalk.red(`Error: ${err.message}`));
-    process.exitCode = 1;
-    return;
-  }
-
-  const aiConfig = getAIConfig();
-  const exists = aiConfig.providers.some((p) => p.name.toLowerCase() === backend);
-  if (exists) {
+const resolveProviderContext = (params: {
+  name: string;
+  providers: AIProviderConfig[];
+}): ProviderContext | null => {
+  const { name, providers } = params;
+  const normalized = name.toLowerCase();
+  if (!VALID_BACKENDS.has(normalized)) {
     console.error(
       chalk.red(
-        `Error: Provider "${backend}" is already configured. Use "kdm auth update ${backend}" instead.`,
+        `Error: Unsupported backend "${name}". Supported: ${Array.from(VALID_BACKENDS).join(', ')}`,
       ),
     );
     process.exitCode = 1;
-    return;
+    return null;
   }
 
-  const model = options.model || getDefaultModel(backend);
-  const customHeaders = options.customHeader?.length
-    ? parseCustomHeaders(options.customHeader)
-    : undefined;
-
-  const provider: AIProviderConfig = {
-    name: backend,
-    model,
-    password: options.password,
-    baseUrl: options.baseurl,
-    temperature: options.temperature ? Number.parseFloat(options.temperature) : 0.7,
-    topP: options.topp ? Number.parseFloat(options.topp) : 1,
-    topK: options.topk ? Number.parseInt(options.topk, 10) : 50,
-    maxTokens: options.maxtokens ? Number.parseInt(options.maxtokens, 10) : 2048,
-    customHeaders,
-  };
-
-  aiConfig.providers.push(provider);
-  if (!aiConfig.defaultProvider) {
-    aiConfig.defaultProvider = backend;
+  const idx = providers.findIndex((p) => p.name.toLowerCase() === normalized);
+  if (idx === -1) {
+    console.error(chalk.red(`Error: AI provider "${name}" is not configured.`));
+    process.exitCode = 1;
+    return null;
   }
 
-  setAIConfig(aiConfig);
-  console.log(chalk.green(`Successfully added AI provider "${backend}".`));
+  return { backend: normalized, idx };
+};
+
+/**
+ * Validates and resolves the backend name from CLI options.
+ * @param options CLI parsed options.
+ * @returns Resolved backend name or null.
+ */
+const resolveNewBackend = (options: any): string | null => {
+  const backend = (options.backend || 'openai').toLowerCase();
+  if (!VALID_BACKENDS.has(backend)) {
+    console.error(
+      chalk.red(
+        `Error: Unsupported backend "${options.backend}". Supported: ${Array.from(VALID_BACKENDS).join(', ')}`,
+      ),
+    );
+    process.exitCode = 1;
+    return null;
+  }
+  return backend;
+};
+
+/**
+ * Ensures provider does not already exist in the list.
+ * @param params Object containing target name and providers list.
+ * @returns true if not configured.
+ */
+const ensureProviderNotExists = (params: {
+  name: string;
+  providers: AIProviderConfig[];
+}): boolean => {
+  const { name, providers } = params;
+  if (providers.some((p) => p.name.toLowerCase() === name)) {
+    console.error(
+      chalk.red(
+        `Error: Provider "${name}" is already configured. Use "kdm auth update ${name}" instead.`,
+      ),
+    );
+    process.exitCode = 1;
+    return false;
+  }
+  return true;
+};
+
+/**
+ * Updates option header configuration parameters.
+ * @param provider Config to update.
+ * @param options CLI flags.
+ */
+const updateHeaders = (provider: AIProviderConfig, options: any): void => {
+  const customHeader = options.customHeader;
+  if (customHeader && customHeader.length > 0) {
+    provider.customHeaders = parseCustomHeaders(customHeader);
+  }
+};
+
+/**
+ * Updates option numeric configuration parameters.
+ * @param provider Config to update.
+ * @param options CLI flags.
+ */
+const updateNumericFields = (provider: AIProviderConfig, options: any): void => {
+  if (options.temperature !== undefined) {
+    provider.temperature = Number.parseFloat(options.temperature);
+  }
+  if (options.topp !== undefined) {
+    provider.topP = Number.parseFloat(options.topp);
+  }
+  if (options.topk !== undefined) {
+    provider.topK = Number.parseInt(options.topk, 10);
+  }
+  if (options.maxtokens !== undefined) {
+    provider.maxTokens = Number.parseInt(options.maxtokens, 10);
+  }
 };
 
 /**
@@ -131,17 +168,61 @@ const assignProviderUpdateOptions = (provider: AIProviderConfig, options: any): 
   if (options.model) provider.model = options.model;
   if (options.password !== undefined) provider.password = options.password;
   if (options.baseurl !== undefined) provider.baseUrl = options.baseurl;
-  if (options.temperature !== undefined) {
-    provider.temperature = Number.parseFloat(options.temperature);
-  }
-  if (options.topp !== undefined) provider.topP = Number.parseFloat(options.topp);
-  if (options.topk !== undefined) provider.topK = Number.parseInt(options.topk, 10);
-  if (options.maxtokens !== undefined) {
-    provider.maxTokens = Number.parseInt(options.maxtokens, 10);
-  }
-  if (options.customHeader?.length) {
-    provider.customHeaders = parseCustomHeaders(options.customHeader);
-  }
+  updateNumericFields(provider, options);
+  updateHeaders(provider, options);
+};
+
+/**
+ * Helper to update configuration state and print success messaging.
+ * @param params Object containing backend name, mutate action and success message structure.
+ */
+const modifyProviderConfig = (params: {
+  backend: string;
+  mutate: (config: ReturnType<typeof getAIConfig>, idx: number, name: string) => void;
+  message: string;
+}): void => {
+  const { backend, mutate, message } = params;
+  const aiConfig = getAIConfig();
+  const ctx = resolveProviderContext({ name: backend, providers: aiConfig.providers });
+  if (!ctx) return;
+
+  mutate(aiConfig, ctx.idx, ctx.backend);
+  setAIConfig(aiConfig);
+  console.log(chalk.green(message.replace('%s', ctx.backend)));
+};
+
+/**
+ * Adds a new AI provider to the store.
+ * @param options CLI parsed option flags.
+ */
+const handleAuthAdd = (options: any): void => {
+  const backend = resolveNewBackend(options);
+  if (!backend) return;
+
+  const aiConfig = getAIConfig();
+  if (!ensureProviderNotExists({ name: backend, providers: aiConfig.providers })) return;
+
+  const customHeaders = options.customHeader?.length
+    ? parseCustomHeaders(options.customHeader)
+    : undefined;
+
+  const provider: AIProviderConfig = {
+    name: backend,
+    model: options.model || DEFAULT_MODELS[backend] || 'default',
+    password: options.password,
+    baseUrl: options.baseurl,
+    temperature: options.temperature ? Number.parseFloat(options.temperature) : 0.7,
+    topP: options.topp ? Number.parseFloat(options.topp) : 1,
+    topK: options.topk ? Number.parseInt(options.topk, 10) : 50,
+    maxTokens: options.maxtokens ? Number.parseInt(options.maxtokens, 10) : 2048,
+    customHeaders,
+  };
+
+  aiConfig.providers.push(provider);
+  aiConfig.defaultProvider = aiConfig.defaultProvider || backend;
+
+  setAIConfig(aiConfig);
+  console.log(chalk.green(`Successfully added AI provider "${backend}".`));
 };
 
 /**
@@ -150,33 +231,11 @@ const assignProviderUpdateOptions = (provider: AIProviderConfig, options: any): 
  * @param options CLI parsed option flags.
  */
 const handleAuthUpdate = (backend: string, options: any): void => {
-  let normalizedBackend: string;
-  try {
-    normalizedBackend = validateBackend(backend);
-  } catch (err: any) {
-    console.error(chalk.red(`Error: ${err.message}`));
-    process.exitCode = 1;
-    return;
-  }
-
-  const aiConfig = getAIConfig();
-  const idx = aiConfig.providers.findIndex(
-    (p) => p.name.toLowerCase() === normalizedBackend,
-  );
-
-  if (idx === -1) {
-    console.error(
-      chalk.red(
-        `Error: AI provider "${backend}" is not configured. Use "kdm auth add" to add it first.`,
-      ),
-    );
-    process.exitCode = 1;
-    return;
-  }
-
-  assignProviderUpdateOptions(aiConfig.providers[idx], options);
-  setAIConfig(aiConfig);
-  console.log(chalk.green(`Successfully updated AI provider "${normalizedBackend}".`));
+  modifyProviderConfig({
+    backend,
+    mutate: (config, idx) => assignProviderUpdateOptions(config.providers[idx], options),
+    message: 'Successfully updated AI provider "%s".',
+  });
 };
 
 /**
@@ -195,7 +254,7 @@ const handleAuthList = (): void => {
     const defaultMarker = isDefault ? chalk.green(' (default)') : '';
     console.log(`- ${chalk.blue.bold(p.name)}${defaultMarker}:`);
     console.log(`    Model:       ${p.model}`);
-    console.log(`    Password:    ${maskSecret(p.password)}`);
+    console.log(`    Password:    ${getMaskedSecret(p)}`);
     console.log(`    Base URL:    ${p.baseUrl || '(default)'}`);
     console.log(`    Temperature: ${p.temperature ?? 0.7}`);
     console.log(`    TopP:        ${p.topP ?? 1}`);
@@ -209,30 +268,13 @@ const handleAuthList = (): void => {
  * @param backend Name of the backend.
  */
 const handleAuthDefault = (backend: string): void => {
-  let normalizedBackend: string;
-  try {
-    normalizedBackend = validateBackend(backend);
-  } catch (err: any) {
-    console.error(chalk.red(`Error: ${err.message}`));
-    process.exitCode = 1;
-    return;
-  }
-
-  const aiConfig = getAIConfig();
-  const exists = aiConfig.providers.some((p) => p.name.toLowerCase() === normalizedBackend);
-  if (!exists) {
-    console.error(
-      chalk.red(
-        `Error: AI provider "${backend}" is not configured. Configure it first using "kdm auth add".`,
-      ),
-    );
-    process.exitCode = 1;
-    return;
-  }
-
-  aiConfig.defaultProvider = normalizedBackend;
-  setAIConfig(aiConfig);
-  console.log(chalk.green(`Successfully set default AI provider to "${normalizedBackend}".`));
+  modifyProviderConfig({
+    backend,
+    mutate: (config, _, name) => {
+      config.defaultProvider = name;
+    },
+    message: 'Successfully set default AI provider to "%s".',
+  });
 };
 
 /**
@@ -240,33 +282,17 @@ const handleAuthDefault = (backend: string): void => {
  * @param backend Name of the backend.
  */
 const handleAuthRemove = (backend: string): void => {
-  let normalizedBackend: string;
-  try {
-    normalizedBackend = validateBackend(backend);
-  } catch (err: any) {
-    console.error(chalk.red(`Error: ${err.message}`));
-    process.exitCode = 1;
-    return;
-  }
-
-  const aiConfig = getAIConfig();
-  const exists = aiConfig.providers.some((p) => p.name.toLowerCase() === normalizedBackend);
-  if (!exists) {
-    console.error(chalk.red(`Error: AI provider "${backend}" is not configured.`));
-    process.exitCode = 1;
-    return;
-  }
-
-  aiConfig.providers = aiConfig.providers.filter(
-    (p) => p.name.toLowerCase() !== normalizedBackend,
-  );
-
-  if (aiConfig.defaultProvider?.toLowerCase() === normalizedBackend) {
-    aiConfig.defaultProvider = aiConfig.providers.length > 0 ? aiConfig.providers[0].name : undefined;
-  }
-
-  setAIConfig(aiConfig);
-  console.log(chalk.green(`Successfully removed AI provider "${normalizedBackend}".`));
+  modifyProviderConfig({
+    backend,
+    mutate: (config, _, name) => {
+      config.providers = config.providers.filter((p) => p.name.toLowerCase() !== name);
+      if (config.defaultProvider?.toLowerCase() === name) {
+        config.defaultProvider =
+          config.providers.length > 0 ? config.providers[0].name : undefined;
+      }
+    },
+    message: 'Successfully removed AI provider "%s".',
+  });
 };
 
 /**
@@ -296,7 +322,12 @@ export const registerAuthCommand = (program: Command): void => {
     .option('--topp <topp>', 'Top-P value')
     .option('--topk <topk>', 'Top-K value')
     .option('--maxtokens <maxtokens>', 'Maximum tokens to generate')
-    .option('--custom-header <header>', 'Custom request headers in Key=Value format', collectHeaders, [])
+    .option(
+      '--custom-header <header>',
+      'Custom request headers in Key=Value format',
+      collectHeaders,
+      [],
+    )
     .action(handleAuthAdd);
 
   auth
@@ -324,6 +355,11 @@ export const registerAuthCommand = (program: Command): void => {
     .option('--topp <topp>', 'Top-P value')
     .option('--topk <topk>', 'Top-K value')
     .option('--maxtokens <maxtokens>', 'Maximum tokens to generate')
-    .option('--custom-header <header>', 'Custom request headers in Key=Value format', collectHeaders, [])
+    .option(
+      '--custom-header <header>',
+      'Custom request headers in Key=Value format',
+      collectHeaders,
+      [],
+    )
     .action(handleAuthUpdate);
 };

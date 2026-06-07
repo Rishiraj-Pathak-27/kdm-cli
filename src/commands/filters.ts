@@ -16,11 +16,7 @@ const handleListFilters = (): void => {
   const inactiveDisplay = allAvailable.filter((name) => !activeDisplay.includes(name));
 
   console.log(chalk.bold('Active filters:'));
-  if (activeDisplay.length > 0) {
-    activeDisplay.forEach((f) => console.log(`- ${f}`));
-  } else {
-    console.log('(none)');
-  }
+  activeDisplay.forEach((f) => console.log(`- ${f}`));
 
   console.log();
   console.log(chalk.bold('Available but inactive filters:'));
@@ -61,6 +57,32 @@ const handleAddFilter = (name: string): void => {
 };
 
 /**
+ * Removes a filter that was explicitly added to active filters.
+ * @param active Currently configured active filters.
+ * @param name Name of the filter to remove.
+ */
+const removeExplicitFilter = (active: string[], name: string): void => {
+  if (!active.includes(name)) {
+    console.log(`Filter "${name}" is not currently active.`);
+    return;
+  }
+  const updated = active.filter((f) => f !== name);
+  setActiveFilters(updated);
+  console.log(chalk.green(`Successfully removed filter "${name}" from active filters.`));
+};
+
+/**
+ * Removes a default filter when activeFilters configuration is empty.
+ * Initializes configuration with remaining defaults.
+ * @param name Name of the filter to remove.
+ */
+const removeDefaultFilter = (name: string): void => {
+  const updated = DEFAULT_FILTERS.filter((f) => f !== name);
+  setActiveFilters(updated);
+  console.log(chalk.green(`Successfully removed default filter "${name}" from active filters.`));
+};
+
+/**
  * Removes a filter name from the active filters config.
  * @param name Name of the filter to remove.
  */
@@ -72,23 +94,10 @@ const handleRemoveFilter = (name: string): void => {
   }
 
   const active = getActiveFilters();
-
   if (active.length > 0) {
-    if (!active.includes(name)) {
-      console.log(`Filter "${name}" is not currently active.`);
-      return;
-    }
-    const updated = active.filter((f) => f !== name);
-    setActiveFilters(updated);
-    console.log(chalk.green(`Successfully removed filter "${name}" from active filters.`));
+    removeExplicitFilter(active, name);
   } else {
-    if (!DEFAULT_FILTERS.includes(name)) {
-      console.log(`Filter "${name}" is not currently active.`);
-      return;
-    }
-    const updated = DEFAULT_FILTERS.filter((f) => f !== name);
-    setActiveFilters(updated);
-    console.log(chalk.green(`Successfully removed default filter "${name}" from active filters.`));
+    removeDefaultFilter(name);
   }
 };
 

@@ -2,6 +2,46 @@ import { AIClient } from './types';
 import { AIProviderConfig } from '../config/schema';
 
 /**
+ * Formats the standard OpenAI URL based on user custom base url configuration.
+ * @param baseUrl User configured base URL or undefined.
+ * @returns Formatted completions URL.
+ */
+const formatOpenAIUrl = (baseUrl?: string): string => {
+  const base = baseUrl || 'https://api.openai.com/v1/chat/completions';
+  const url = base.replace(/\/$/, '');
+  if (url.endsWith('/v1')) {
+    return `${url}/chat/completions`;
+  }
+  if (!url.includes('/chat/completions')) {
+    return `${url}/chat/completions`;
+  }
+  return url;
+};
+
+/**
+ * Builds the OpenAI payload body.
+ * @param model Model name.
+ * @param prompt Prompt text.
+ * @param temp Temperature.
+ * @param topP TopP.
+ * @param maxTokens MaxTokens.
+ * @returns Payload body object.
+ */
+const buildOpenAIBody = (
+  model: string,
+  prompt: string,
+  temp?: number,
+  topP?: number,
+  maxTokens?: number,
+) => ({
+  model,
+  messages: [{ role: 'user', content: prompt }],
+  temperature: temp ?? 0.7,
+  top_p: topP ?? 1,
+  max_tokens: maxTokens ?? 2048,
+});
+
+/**
  * AI client implementation for querying OpenAI compatible APIs.
  */
 export class OpenAIAIClient implements AIClient {
@@ -29,26 +69,20 @@ export class OpenAIAIClient implements AIClient {
    * @returns The generated response string.
    */
   async getCompletion(prompt: string): Promise<string> {
-    let url = this.config.baseUrl!;
-    if (url.endsWith('/v1') || url.endsWith('/v1/')) {
-      url = url.replace(/\/$/, '') + '/chat/completions';
-    } else if (!url.includes('/chat/completions')) {
-      url = url.replace(/\/$/, '') + '/chat/completions';
-    }
-
-    const body = {
-      model: this.config.model,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: this.config.temperature ?? 0.7,
-      top_p: this.config.topP ?? 1,
-      max_tokens: this.config.maxTokens ?? 2048,
-    };
+    const url = formatOpenAIUrl(this.config.baseUrl);
+    const body = buildOpenAIBody(
+      this.config.model,
+      prompt,
+      this.config.temperature,
+      this.config.topP,
+      this.config.maxTokens,
+    );
 
     const res = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.config.password}`,
+        Authorization: `Bearer ${this.config.password}`,
         ...this.config.customHeaders,
       },
       body: JSON.stringify(body),
