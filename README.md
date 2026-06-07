@@ -50,6 +50,12 @@ Unlike tools that focus on a single runtime ([k9s] for Kubernetes or [lazydocker
 | **Log Fetching** | Retrieve logs from containers or pods with automatic Docker-to-Kubernetes fallback |
 | **Alert Notifications** | Send alerts via Discord webhook or email SMTP on failures |
 | **Minikube Support** | Check Minikube profile status and connectivity |
+| **AI Diagnostics** | Scan cluster workload configuration errors (`kdm analyze`) with AI explanations (`--explain`) |
+| **AI Providers** | Multi-backend credentials (`kdm auth`) supporting OpenAI, Anthropic, Gemini, WatsonX, Ollama, etc. |
+| **Local Cache** | Cache system (`kdm cache`) to save AI explanation API tokens and reduce network latency |
+| **Dynamic Filters** | Customize default active analyzers list (`kdm filters`) |
+| **Custom Analyzers** | Run scripts or webhooks (`kdm custom-analyzer`) to analyze CustomResourceDefinitions (e.g. KEDA, Kyverno) |
+| **MCP & HTTP Server** | Run KDM as a REST API or Model Context Protocol (MCP) server (`kdm serve`) for agent integrations |
 
 ---
 
@@ -136,6 +142,73 @@ Retrieve the last 100 lines of logs from a container or pod. Docker is tried fir
 
 ```bash
 kdm logs <name>         # Container name/ID prefix or pod name
+```
+
+### Diagnostics & AI Analysis
+
+Scan your Kubernetes cluster for common workload issues (mismatched replicas, crashing containers, invalid Gateway routes, etc.) and get AI-powered troubleshooting advice in plain English.
+
+```bash
+kdm analyze                          # Run cluster diagnostics and output color-coded report
+kdm analyze -n default               # Analyze resources in the 'default' namespace only
+kdm analyze --explain                # Run diagnostics and fetch AI explanation
+kdm analyze --explain --backend ollama # Force specific active AI backend provider
+kdm analyze --explain --anonymize    # Anonymize resource names in prompt to protect sensitive data
+kdm analyze --output json            # Output results in structured JSON format
+```
+
+### AI Providers (Auth)
+
+Manage AI backend settings and credentials. KDM supports **10+** AI providers including OpenAI, Anthropic, Gemini, Vertex, OCI GenAI, HuggingFace, Groq, WatsonX, and Ollama.
+
+```bash
+kdm auth add -b openai -m gpt-4o -p <key> # Configure OpenAI gpt-4o with API key
+kdm auth add -b ollama -m llama3.1       # Configure local Ollama llama3.1
+kdm auth list                            # List configured AI backends and settings
+kdm auth default ollama                  # Set default active AI backend
+kdm auth remove openai                   # Remove backend credentials from config
+kdm auth update ollama -t 0.2            # Update settings (e.g. set temperature to 0.2)
+```
+
+### Local Explanation Cache
+
+KDM caches AI explanations locally to save API tokens and reduce network latency.
+
+```bash
+kdm cache list              # List all cached AI explanation keys
+kdm cache get <key>         # Retrieve cached text for a key
+kdm cache remove <key>      # Delete a specific cached entry
+kdm cache purge             # Clear all cached AI explanations
+```
+
+### Analyzer Filters
+
+By default, KDM runs all core resource analyzers. You can customize which analyzers are active.
+
+```bash
+kdm filters list            # List active filters and available inactive ones
+kdm filters add Ingress     # Add Ingress analyzer to active default filters list
+kdm filters remove Ingress  # Remove analyzer from active list (falls back to defaults)
+```
+
+### Custom Analyzers
+
+Register custom scripts/commands or HTTP webhooks to analyze arbitrary custom resources (CRDs) like Kyverno, KEDA, and Prometheus.
+
+```bash
+kdm custom-analyzer add keda --command "kubectl get scaledobjects -A -o json" # Add custom analyzer command
+kdm custom-analyzer add my-webhook --url "https://api.my-org.internal/check"  # Add custom HTTP analyzer
+kdm custom-analyzer list                                                     # List all custom analyzers
+kdm custom-analyzer remove keda                                              # Remove custom analyzer
+```
+
+### HTTP & MCP Server
+
+Run KDM in server mode. KDM can run as a standard REST API or as a **Model Context Protocol (MCP)** server, enabling seamless integration with AI agents (like Claude Desktop).
+
+```bash
+kdm serve --port 8080       # Start KDM HTTP REST server on port 8080
+kdm serve --mcp             # Start KDM JSON-RPC MCP server over stdio
 ```
 
 ### Configuration
