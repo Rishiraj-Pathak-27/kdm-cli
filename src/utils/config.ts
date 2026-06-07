@@ -7,12 +7,22 @@ import {
 } from '../config/store';
 import type { LegacyNotificationConfig } from '../config/schema';
 
+/**
+ * Retrieves the current legacy notification configuration.
+ * @returns The LegacyNotificationConfig object.
+ */
 export const getConfig = () => getLegacyConfig();
 
 type SensitiveLegacyKey = 'email_password';
 
 const sensitiveLegacyKeys = new Set<keyof LegacyNotificationConfig>(['email_password']);
 
+/**
+ * Sets a configuration key to the specified value in the legacy store,
+ * throwing an error if trying to set a sensitive key.
+ * @param key The configuration key to set.
+ * @param value The value to associate with the key.
+ */
 export const setConfig = <Key extends Exclude<keyof LegacyNotificationConfig, SensitiveLegacyKey>>(
   key: Key,
   value: LegacyNotificationConfig[Key],
@@ -23,9 +33,20 @@ export const setConfig = <Key extends Exclude<keyof LegacyNotificationConfig, Se
   setLegacyValue(key, value);
 };
 
+/**
+ * Deletes a single key from the legacy notification configuration.
+ * @param key The configuration key to delete.
+ */
 export const deleteConfig = (key: keyof LegacyNotificationConfig) => deleteLegacyValue(key);
+
+/**
+ * Clears the entire configuration store.
+ */
 export const clearConfig = () => clearStoredConfig();
 
+/**
+ * Deletes all notification-related credentials and configuration keys from the store.
+ */
 export const clearNotificationCredentials = () => {
   deleteLegacyValue('discord_webhook');
   deleteLegacyValue('email_host');
@@ -35,7 +56,11 @@ export const clearNotificationCredentials = () => {
   deleteLegacyValue('email_password');
 };
 
-// Helper for sensitive data - always use environment variables
+/**
+ * Constructs and retrieves SMTP connection settings from stored configuration
+ * and the KDM_SMTP_PASSWORD environment variable.
+ * @returns An object containing host, port, authentication credentials, and recipient address.
+ */
 export const getSMTPSettings = () => {
   return {
     host: getLegacyValue('email_host'),
