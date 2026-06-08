@@ -6,7 +6,7 @@ labels: ["good first issue", "help wanted", "typescript", "vitest"]
 assignees: ""
 ---
 
-### 📝 What needs to be done?
+## 📝 What needs to be done?
 <!-- State the subcommand or flag to be added/fixed via Commander v14.0.3 -->
 
 ### 🎯 Expected Behavior
