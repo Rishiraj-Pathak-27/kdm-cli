@@ -27,6 +27,9 @@ const waitForFrameToContain = async (mockStdout: MockWritable, substring: string
 
 class MockWritable extends Writable {
   frames: string[] = [];
+  isTTY = true;
+  columns = 80;
+  rows = 24;
   _write(chunk: any, encoding: string, callback: (error?: Error | null) => void) {
     this.frames.push(chunk.toString());
     callback();
