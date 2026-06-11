@@ -13,14 +13,23 @@ if (!console.Console) {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const waitForFrameToContain = async (mockStdout: MockWritable, substring: string, timeout = 2000) => {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    const output = mockStdout.frames.join('\n');
+    if (output.includes(substring)) {
+      return;
+    }
+    await sleep(20);
+  }
+  throw new Error(`Timed out waiting for "${substring}" to appear in stdout. Output was:\n${mockStdout.frames.join('\n')}`);
+};
+
 class MockWritable extends Writable {
   frames: string[] = [];
-  write(chunk: any, encoding: any, callback: any) {
+  _write(chunk: any, encoding: string, callback: (error?: Error | null) => void) {
     this.frames.push(chunk.toString());
-    if (typeof callback === 'function') {
-      callback();
-    }
-    return true;
+    callback();
   }
 }
 
@@ -55,10 +64,9 @@ describe('WatchDashboard', () => {
       memoryLimit: 8000000000,
     });
 
-    const { unmount } = render(<WatchDashboard />, { stdout: mockStdout });
+    const { unmount } = render(<WatchDashboard />, { stdout: mockStdout as any });
 
-    // Wait for async useEffect fetch calls to complete
-    await sleep(200);
+    await waitForFrameToContain(mockStdout, 'pod-1');
 
     const output = mockStdout.frames.join('\n');
     expect(output).toContain('KDM Live Dashboard');
@@ -74,16 +82,15 @@ describe('WatchDashboard', () => {
 
   it('handles K8s API errors gracefully', async () => {
     getRunningPodsSpy.mockRejectedValue(new Error('K8s error'));
-    getK8sClusterStatsSpy.mockResolvedValue({ cpu: 'N/A', memory: 'N/A', source: 'N/A' });
+    getK8sClusterStatsSpy.mockRejectedValue(new Error('K8s stats error'));
     getRunningContainersSpy.mockResolvedValue([]);
     getDockerSystemStatsSpy.mockResolvedValue(null);
 
-    const { unmount } = render(<WatchDashboard />, { stdout: mockStdout });
+    const { unmount } = render(<WatchDashboard />, { stdout: mockStdout as any });
 
-    await sleep(200);
+    await waitForFrameToContain(mockStdout, 'ERROR: K8S - K8s error');
 
     const output = mockStdout.frames.join('\n');
-    expect(output).toContain('ERROR: K8S - K8s error');
     expect(output).toContain('k8s Stats: CPU: N/A | Mem: N/A');
 
     unmount();
@@ -93,14 +100,13 @@ describe('WatchDashboard', () => {
     getRunningPodsSpy.mockResolvedValue([]);
     getK8sClusterStatsSpy.mockResolvedValue({ cpu: 'N/A', memory: 'N/A', source: 'N/A' });
     getRunningContainersSpy.mockRejectedValue(new Error('Docker error'));
-    getDockerSystemStatsSpy.mockResolvedValue(null);
+    getDockerSystemStatsSpy.mockRejectedValue(new Error('Docker stats error'));
 
-    const { unmount } = render(<WatchDashboard />, { stdout: mockStdout });
+    const { unmount } = render(<WatchDashboard />, { stdout: mockStdout as any });
 
-    await sleep(200);
+    await waitForFrameToContain(mockStdout, 'ERROR: DOCKER - Docker error');
 
     const output = mockStdout.frames.join('\n');
-    expect(output).toContain('ERROR: DOCKER - Docker error');
     expect(output).toContain('Docker Stats: CPU: N/A | Mem: N/A');
 
     unmount();
@@ -120,7 +126,7 @@ describe('WatchDashboard', () => {
       configurable: true,
     });
 
-    const { unmount } = render(<WatchDashboard />, { stdout: mockStdout });
+    const { unmount } = render(<WatchDashboard />, { stdout: mockStdout as any });
     
     process.stdout.emit('resize');
 

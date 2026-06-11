@@ -234,6 +234,54 @@ describe('getDockerSystemStats', () => {
     expect(stats?.memoryUsage).toBe(0);
   });
 
+  it('returns zero stats and gets memory limit from docker.info when no containers are running', async () => {
+    mockContainersList.mockResolvedValueOnce([]);
+    mockDockerInfo.mockResolvedValueOnce({ MemTotal: 12000000000 });
+
+    const stats = await getDockerSystemStats();
+    expect(stats).toEqual({
+      cpu: 0,
+      memoryUsage: 0,
+      memoryLimit: 12000000000,
+    });
+  });
+
+  it('handles docker.info failure when no containers are running', async () => {
+    mockContainersList.mockResolvedValueOnce([]);
+    mockDockerInfo.mockRejectedValueOnce(new Error('info fail'));
+
+    const stats = await getDockerSystemStats();
+    expect(stats).toEqual({
+      cpu: 0,
+      memoryUsage: 0,
+      memoryLimit: 0,
+    });
+  });
+
+  it('returns 0 CPU percent when cpuDelta or systemCpuDelta is zero or negative', async () => {
+    mockContainersList.mockResolvedValueOnce([
+      { Id: 'cont1', Names: ['/c1'] },
+    ]);
+    mockContainerStats.mockResolvedValueOnce({
+      cpu_stats: {
+        cpu_usage: { total_usage: 100 },
+        system_cpu_usage: 1000,
+        online_cpus: 2,
+      },
+      precpu_stats: {
+        cpu_usage: { total_usage: 100 },
+        system_cpu_usage: 1000,
+      },
+      memory_stats: {
+        usage: 1000000,
+        limit: 8000000,
+      },
+    });
+
+    const stats = await getDockerSystemStats();
+    expect(stats?.cpu).toBe(0);
+  });
+
   it('gracefully degrades to null when listing containers fails', async () => {
     mockContainersList.mockRejectedValueOnce(new Error('Docker socket not available'));
     const stats = await getDockerSystemStats();
@@ -334,6 +382,49 @@ describe('getK8sClusterStats', () => {
     expect(stats.cpu).toBe('N/A');
     expect(stats.memory).toBe('N/A');
     expect(stats.source).toBe('N/A');
+  });
+
+  it('handles empty results from metrics-server and empty pods/requests list', async () => {
+    mockListClusterCustomObject
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce({ items: [] });
+
+    mockListPodForAllNamespaces.mockResolvedValueOnce({
+      items: [
+        {
+          status: { phase: 'Running' },
+          spec: {
+            containers: [
+              { resources: {} },
+              { resources: { requests: {} } },
+            ],
+          },
+        },
+        {
+          status: { phase: 'Running' },
+          spec: {
+            // containers undefined
+          },
+        },
+        {
+          status: { phase: 'Running' },
+          // spec undefined
+        },
+        {
+          status: { phase: 'Running' },
+          spec: {
+            containers: [
+              { resources: { requests: { cpu: '100m', memory: '256Mi' } } }
+            ]
+          }
+        }
+      ],
+    });
+
+    const stats = await getK8sClusterStats();
+    expect(stats.cpu).toBe('100m');
+    expect(stats.memory).toBe('256MiB');
+    expect(stats.source).toBe('requests');
   });
 });
 
