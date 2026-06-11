@@ -3,11 +3,13 @@ import {
   parseK8sCpuQuantity,
   parseK8sMemoryQuantity,
   formatK8sBytes,
-  getK8sClusterStats
+  getK8sClusterStats,
+  getRunningPods
 } from '../kubernetes/pods';
 import {
   getDockerSystemStats,
-  formatDockerBytes
+  formatDockerBytes,
+  getRunningContainers
 } from '../docker/containers';
 
 const mockContainersList = vi.fn();
@@ -40,6 +42,11 @@ vi.mock('../kubernetes/client', () => {
   };
 });
 
+const mockTriggerAlert = vi.fn();
+vi.mock('../monitor/alerts', () => ({
+  triggerAlert: (...args: any[]) => mockTriggerAlert(...args),
+}));
+
 describe('Kubernetes resource quantity parsing', () => {
   describe('parseK8sCpuQuantity', () => {
     it('parses millicores', () => {
@@ -68,6 +75,10 @@ describe('Kubernetes resource quantity parsing', () => {
       expect(parseK8sCpuQuantity('')).toBe(0);
       expect(parseK8sCpuQuantity('abc')).toBe(0);
     });
+
+    it('hits the default case for other suffixes', () => {
+      expect(parseK8sCpuQuantity('2x')).toBe(2000);
+    });
   });
 
   describe('parseK8sMemoryQuantity', () => {
@@ -90,6 +101,7 @@ describe('Kubernetes resource quantity parsing', () => {
     it('handles empty or malformed inputs', () => {
       expect(parseK8sMemoryQuantity('')).toBe(0);
       expect(parseK8sMemoryQuantity('abc')).toBe(0);
+      expect(parseK8sMemoryQuantity('512')).toBe(512);
     });
   });
 });
@@ -115,6 +127,7 @@ describe('Byte formatting', () => {
 describe('getDockerSystemStats', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockDockerInfo.mockResolvedValue({ MemTotal: 8000000000 });
   });
 
   it('calculates aggregate stats for running containers', async () => {
@@ -170,6 +183,55 @@ describe('getDockerSystemStats', () => {
     // Total Memory: 2700000
     expect(stats?.memoryUsage).toBe(2700000);
     expect(stats?.memoryLimit).toBe(8000000);
+  });
+
+  it('falls back to docker.info() memory limit if limit from stats is 0', async () => {
+    mockContainersList.mockResolvedValueOnce([
+      { Id: 'cont1', Names: ['/c1'] },
+    ]);
+    mockContainerStats.mockResolvedValueOnce({
+      cpu_stats: {},
+      precpu_stats: {},
+      memory_stats: {
+        usage: 1000,
+        limit: 0,
+      },
+    });
+    mockDockerInfo.mockResolvedValueOnce({
+      MemTotal: 16000000000,
+    });
+
+    const stats = await getDockerSystemStats();
+    expect(stats?.memoryLimit).toBe(16000000000);
+  });
+
+  it('handles docker.info() failure gracefully', async () => {
+    mockContainersList.mockResolvedValueOnce([
+      { Id: 'cont1', Names: ['/c1'] },
+    ]);
+    mockContainerStats.mockResolvedValueOnce({
+      cpu_stats: {},
+      precpu_stats: {},
+      memory_stats: {
+        usage: 1000,
+        limit: 0,
+      },
+    });
+    mockDockerInfo.mockRejectedValueOnce(new Error('Info failed'));
+
+    const stats = await getDockerSystemStats();
+    expect(stats?.memoryLimit).toBe(0);
+  });
+
+  it('handles container.stats failure gracefully for individual containers', async () => {
+    mockContainersList.mockResolvedValueOnce([
+      { Id: 'cont1', Names: ['/c1'] },
+    ]);
+    mockContainerStats.mockRejectedValueOnce(new Error('Stats failed'));
+
+    const stats = await getDockerSystemStats();
+    expect(stats?.cpu).toBe(0);
+    expect(stats?.memoryUsage).toBe(0);
   });
 
   it('gracefully degrades to null when listing containers fails', async () => {
@@ -272,5 +334,99 @@ describe('getK8sClusterStats', () => {
     expect(stats.cpu).toBe('N/A');
     expect(stats.memory).toBe('N/A');
     expect(stats.source).toBe('N/A');
+  });
+});
+
+describe('getRunningContainers actual implementation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('correctly maps containers and triggers alerts for restart/failure states', async () => {
+    mockContainersList.mockResolvedValueOnce([
+      { Id: 'c123456789012', Names: ['/my-container'], Image: 'nginx', State: 'running', Status: 'Up' },
+      { Id: 'c234567890123', Names: ['/my-restarting'], Image: 'nginx', State: 'restarting', Status: 'Restarting (1)' },
+      { Id: 'c345678901234', Names: ['/my-failed'], Image: 'nginx', State: 'exited', Status: 'Exited (137)' },
+      { Id: 'c456789012345', Names: ['/my-clean-exit'], Image: 'nginx', State: 'exited', Status: 'Exited (0)' },
+    ]);
+
+    const containers = await getRunningContainers();
+    expect(containers).toHaveLength(4);
+    expect(containers[0].id).toBe('c12345678901');
+    expect(containers[0].name).toBe('my-container');
+
+    expect(mockTriggerAlert).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'container:my-restarting:restarting',
+      severity: 'warning'
+    }), expect.any(Object));
+
+    expect(mockTriggerAlert).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'container:my-failed:failure',
+      severity: 'critical'
+    }), expect.any(Object));
+  });
+
+  it('propagates errors when listContainers rejects', async () => {
+    mockContainersList.mockRejectedValueOnce(new Error('List failed'));
+    await expect(getRunningContainers()).rejects.toThrow('List failed');
+  });
+});
+
+describe('getRunningPods actual implementation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('correctly maps pods and triggers alerts for failures/waiting conditions', async () => {
+    mockListPodForAllNamespaces.mockResolvedValueOnce({
+      items: [
+        {
+          metadata: { name: 'pod-running', namespace: 'default' },
+          status: {
+            phase: 'Running',
+            containerStatuses: [
+              { restartCount: 2, state: { running: {} } },
+            ],
+          },
+          spec: { nodeName: 'node-1' },
+        },
+        {
+          metadata: { name: 'pod-failed-phase', namespace: 'default' },
+          status: {
+            phase: 'Failed',
+            containerStatuses: [],
+          },
+        },
+        {
+          metadata: { name: 'pod-crashloop', namespace: 'default' },
+          status: {
+            phase: 'Pending',
+            containerStatuses: [
+              { name: 'c1', restartCount: 5, state: { waiting: { reason: 'CrashLoopBackOff' } } },
+            ],
+          },
+        },
+      ],
+    });
+
+    const pods = await getRunningPods();
+    expect(pods).toHaveLength(3);
+    expect(pods[0].name).toBe('pod-running');
+    expect(pods[0].restarts).toBe(2);
+
+    expect(mockTriggerAlert).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'pod:pod-failed-phase:failure',
+      message: expect.stringContaining('FAILED')
+    }), expect.any(Object));
+
+    expect(mockTriggerAlert).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'pod:pod-crashloop:failure',
+      message: expect.stringContaining('CrashLoopBackOff')
+    }), expect.any(Object));
+  });
+
+  it('propagates errors when listPodForAllNamespaces rejects', async () => {
+    mockListPodForAllNamespaces.mockRejectedValueOnce(new Error('K8s down'));
+    await expect(getRunningPods()).rejects.toThrow('K8s down');
   });
 });
