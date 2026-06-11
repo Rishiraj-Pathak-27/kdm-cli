@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { triggerAlert } from '../monitor/alerts';
 import { logger } from '../utils/logger';
 import { getConfig } from '../utils/config';
@@ -27,11 +27,15 @@ vi.mock('../utils/logger', () => ({
 
 // Mock fetch globally
 const mockFetch = vi.fn().mockResolvedValue({ ok: true });
-global.fetch = mockFetch;
 
 describe('alerts monitoring', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal('fetch', mockFetch);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('should trigger alert on first invocation', async () => {
