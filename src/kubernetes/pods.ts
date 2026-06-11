@@ -11,7 +11,7 @@ export interface PodData {
   node: string;
 }
 
-export const getRunningPods = async (): Promise<PodData[]> => {
+export const getRunningPods = async (options?: { forceAlert?: boolean }): Promise<PodData[]> => {
   const api = getK8sApi();
   try {
     const res = await api.listPodForAllNamespaces();
@@ -43,7 +43,7 @@ export const getRunningPods = async (): Promise<PodData[]> => {
           type: 'pod',
           severity: 'critical',
           message: `Pod ${name} in namespace ${pod.metadata?.namespace} failed: ${failureReason}`,
-        });
+        }, { force: options?.forceAlert });
       }
 
       return {

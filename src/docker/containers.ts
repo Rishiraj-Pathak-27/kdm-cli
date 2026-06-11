@@ -10,7 +10,7 @@ export interface ContainerData {
   status: string;
 }
 
-export const getRunningContainers = async (): Promise<ContainerData[]> => {
+export const getRunningContainers = async (options?: { forceAlert?: boolean }): Promise<ContainerData[]> => {
   const docker = getDockerClient();
   try {
     // Try to list containers, use a timeout if possible or just catch common connection errors
@@ -27,7 +27,7 @@ export const getRunningContainers = async (): Promise<ContainerData[]> => {
           type: 'container',
           severity: 'warning',
           message: `Docker container ${name} (${id}) is restarting.`,
-        });
+        }, { force: options?.forceAlert });
       } else if (c.State === 'exited') {
         const match = c.Status.match(/Exited \((\d+)\)/);
         const exitCode = match ? parseInt(match[1], 10) : 0;
@@ -38,7 +38,7 @@ export const getRunningContainers = async (): Promise<ContainerData[]> => {
             type: 'container',
             severity: 'critical',
             message: `Docker container ${name} (${id}) exited with code ${exitCode}.`,
-          });
+          }, { force: options?.forceAlert });
         }
       }
 
