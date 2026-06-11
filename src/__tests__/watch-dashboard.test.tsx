@@ -80,34 +80,38 @@ describe('WatchDashboard', () => {
     unmount();
   });
 
-  it('handles K8s API errors gracefully', async () => {
-    getRunningPodsSpy.mockRejectedValue(new Error('K8s error'));
-    getK8sClusterStatsSpy.mockRejectedValue(new Error('K8s stats error'));
-    getRunningContainersSpy.mockResolvedValue([]);
-    getDockerSystemStatsSpy.mockResolvedValue(null);
+  it.each([
+    {
+      description: 'handles K8s API errors gracefully',
+      mockSetup: () => {
+        getRunningPodsSpy.mockRejectedValue(new Error('K8s error'));
+        getK8sClusterStatsSpy.mockRejectedValue(new Error('K8s stats error'));
+        getRunningContainersSpy.mockResolvedValue([]);
+        getDockerSystemStatsSpy.mockResolvedValue(null);
+      },
+      errorMsg: 'ERROR: K8S - K8s error',
+      outputMsg: 'k8s Stats: CPU: N/A | Mem: N/A',
+    },
+    {
+      description: 'handles Docker API errors gracefully',
+      mockSetup: () => {
+        getRunningPodsSpy.mockResolvedValue([]);
+        getK8sClusterStatsSpy.mockResolvedValue({ cpu: 'N/A', memory: 'N/A', source: 'N/A' });
+        getRunningContainersSpy.mockRejectedValue(new Error('Docker error'));
+        getDockerSystemStatsSpy.mockRejectedValue(new Error('Docker stats error'));
+      },
+      errorMsg: 'ERROR: DOCKER - Docker error',
+      outputMsg: 'Docker Stats: CPU: N/A | Mem: N/A',
+    },
+  ])('$description', async ({ mockSetup, errorMsg, outputMsg }) => {
+    mockSetup();
 
     const { unmount } = render(<WatchDashboard />, { stdout: mockStdout as any });
 
-    await waitForFrameToContain(mockStdout, 'ERROR: K8S - K8s error');
+    await waitForFrameToContain(mockStdout, errorMsg);
 
     const output = mockStdout.frames.join('\n');
-    expect(output).toContain('k8s Stats: CPU: N/A | Mem: N/A');
-
-    unmount();
-  });
-
-  it('handles Docker API errors gracefully', async () => {
-    getRunningPodsSpy.mockResolvedValue([]);
-    getK8sClusterStatsSpy.mockResolvedValue({ cpu: 'N/A', memory: 'N/A', source: 'N/A' });
-    getRunningContainersSpy.mockRejectedValue(new Error('Docker error'));
-    getDockerSystemStatsSpy.mockRejectedValue(new Error('Docker stats error'));
-
-    const { unmount } = render(<WatchDashboard />, { stdout: mockStdout as any });
-
-    await waitForFrameToContain(mockStdout, 'ERROR: DOCKER - Docker error');
-
-    const output = mockStdout.frames.join('\n');
-    expect(output).toContain('Docker Stats: CPU: N/A | Mem: N/A');
+    expect(output).toContain(outputMsg);
 
     unmount();
   });

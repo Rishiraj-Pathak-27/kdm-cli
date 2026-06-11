@@ -186,77 +186,73 @@ describe('getDockerSystemStats', () => {
     expect(stats?.memoryLimit).toBe(8000000000);
   });
 
-  it('falls back to docker.info() memory limit if limit from stats is 0', async () => {
-    mockContainersList.mockResolvedValueOnce([
-      { Id: 'cont1', Names: ['/c1'] },
-    ]);
-    mockContainerStats.mockResolvedValueOnce({
-      cpu_stats: {},
-      precpu_stats: {},
-      memory_stats: {
-        usage: 1000,
-        limit: 0,
-      },
-    });
-    mockDockerInfo.mockResolvedValueOnce({
-      MemTotal: 16000000000,
-    });
+  it.each([
+    {
+      description: 'falls back to docker.info() memory limit if limit from stats is 0',
+      containers: [{ Id: 'cont1', Names: ['/c1'] }],
+      statsMock: { resolve: { cpu_stats: {}, precpu_stats: {}, memory_stats: { usage: 1000, limit: 0 } } },
+      infoMock: { resolve: { MemTotal: 16000000000 } },
+      expectedCpu: 0,
+      expectedMemoryUsage: 1000,
+      expectedLimit: 16000000000,
+    },
+    {
+      description: 'handles docker.info() failure gracefully',
+      containers: [{ Id: 'cont1', Names: ['/c1'] }],
+      statsMock: { resolve: { cpu_stats: {}, precpu_stats: {}, memory_stats: { usage: 1000, limit: 0 } } },
+      infoMock: { reject: new Error('Info failed') },
+      expectedCpu: 0,
+      expectedMemoryUsage: 1000,
+      expectedLimit: 0,
+    },
+    {
+      description: 'handles container.stats failure gracefully for individual containers',
+      containers: [{ Id: 'cont1', Names: ['/c1'] }],
+      statsMock: { reject: new Error('Stats failed') },
+      infoMock: { resolve: { MemTotal: 8000000000 } },
+      expectedCpu: 0,
+      expectedMemoryUsage: 0,
+      expectedLimit: 8000000000,
+    },
+    {
+      description: 'returns zero stats and gets memory limit from docker.info when no containers are running',
+      containers: [],
+      statsMock: null,
+      infoMock: { resolve: { MemTotal: 12000000000 } },
+      expectedCpu: 0,
+      expectedMemoryUsage: 0,
+      expectedLimit: 12000000000,
+    },
+    {
+      description: 'handles docker.info failure when no containers are running',
+      containers: [],
+      statsMock: null,
+      infoMock: { reject: new Error('info fail') },
+      expectedCpu: 0,
+      expectedMemoryUsage: 0,
+      expectedLimit: 0,
+    },
+  ])('$description', async ({ containers, statsMock, infoMock, expectedCpu, expectedMemoryUsage, expectedLimit }) => {
+    mockContainersList.mockResolvedValueOnce(containers);
+    
+    if (statsMock) {
+      if ('resolve' in statsMock) {
+        mockContainerStats.mockResolvedValueOnce(statsMock.resolve);
+      } else {
+        mockContainerStats.mockRejectedValueOnce(statsMock.reject);
+      }
+    }
+    
+    if ('resolve' in infoMock) {
+      mockDockerInfo.mockResolvedValueOnce(infoMock.resolve);
+    } else {
+      mockDockerInfo.mockRejectedValueOnce(infoMock.reject);
+    }
 
     const stats = await getDockerSystemStats();
-    expect(stats?.memoryLimit).toBe(16000000000);
-  });
-
-  it('handles docker.info() failure gracefully', async () => {
-    mockContainersList.mockResolvedValueOnce([
-      { Id: 'cont1', Names: ['/c1'] },
-    ]);
-    mockContainerStats.mockResolvedValueOnce({
-      cpu_stats: {},
-      precpu_stats: {},
-      memory_stats: {
-        usage: 1000,
-        limit: 0,
-      },
-    });
-    mockDockerInfo.mockRejectedValueOnce(new Error('Info failed'));
-
-    const stats = await getDockerSystemStats();
-    expect(stats?.memoryLimit).toBe(0);
-  });
-
-  it('handles container.stats failure gracefully for individual containers', async () => {
-    mockContainersList.mockResolvedValueOnce([
-      { Id: 'cont1', Names: ['/c1'] },
-    ]);
-    mockContainerStats.mockRejectedValueOnce(new Error('Stats failed'));
-
-    const stats = await getDockerSystemStats();
-    expect(stats?.cpu).toBe(0);
-    expect(stats?.memoryUsage).toBe(0);
-  });
-
-  it('returns zero stats and gets memory limit from docker.info when no containers are running', async () => {
-    mockContainersList.mockResolvedValueOnce([]);
-    mockDockerInfo.mockResolvedValueOnce({ MemTotal: 12000000000 });
-
-    const stats = await getDockerSystemStats();
-    expect(stats).toEqual({
-      cpu: 0,
-      memoryUsage: 0,
-      memoryLimit: 12000000000,
-    });
-  });
-
-  it('handles docker.info failure when no containers are running', async () => {
-    mockContainersList.mockResolvedValueOnce([]);
-    mockDockerInfo.mockRejectedValueOnce(new Error('info fail'));
-
-    const stats = await getDockerSystemStats();
-    expect(stats).toEqual({
-      cpu: 0,
-      memoryUsage: 0,
-      memoryLimit: 0,
-    });
+    expect(stats?.cpu).toBe(expectedCpu);
+    expect(stats?.memoryUsage).toBe(expectedMemoryUsage);
+    expect(stats?.memoryLimit).toBe(expectedLimit);
   });
 
   it('returns 0 CPU percent when cpuDelta or systemCpuDelta is zero or negative', async () => {
