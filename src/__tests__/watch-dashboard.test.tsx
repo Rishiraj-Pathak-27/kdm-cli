@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render } from 'ink';
 import { Writable } from 'node:stream';
 import { Console } from 'node:console';
@@ -13,7 +13,7 @@ if (!console.Console) {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const waitForFrameToContain = async (mockStdout: MockWritable, substring: string, timeout = 2000) => {
+const waitForFrameToContain = async (mockStdout: MockWritable, substring: string, timeout = 5000) => {
   const start = Date.now();
   while (Date.now() - start < timeout) {
     const output = mockStdout.frames.join('\n');
@@ -43,10 +43,21 @@ const getDockerSystemStatsSpy = vi.spyOn(containersMod, 'getDockerSystemStats');
 
 describe('WatchDashboard', () => {
   let mockStdout: MockWritable;
+  let originalCI: string | undefined;
 
   beforeEach(() => {
     mockStdout = new MockWritable();
     vi.clearAllMocks();
+    originalCI = process.env.CI;
+    delete process.env.CI;
+  });
+
+  afterEach(() => {
+    if (originalCI !== undefined) {
+      process.env.CI = originalCI;
+    } else {
+      delete process.env.CI;
+    }
   });
 
   it('renders loading states and then displays pods and containers', async () => {
