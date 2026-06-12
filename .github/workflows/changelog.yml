@@ -5,14 +5,14 @@ on:
     types: [published]
   push:
     tags:
-      - 'v*.*.*'      # Matches v1.0.0, v2.14.2, etc.
-      - '*.*.*'       # Matches 1.0.0 (no v prefix)
-      - 'v*.*.*-*'    # Matches v1.0.1-alpha.1, v1.2.0-beta.3, v2.0.0-rc.1
-      - '*.*.*-*'     # Matches 1.0.1-alpha.1 (no v prefix)
+      - 'v*.*.*'
+      - '*.*.*'
+      - 'v*.*.*-*'
+      - '*.*.*-*'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to generate changelog/docs for (e.g., v1.2.5)'
+        description: 'Version to generate docs for (e.g., v1.2.5)'
         required: true
         type: string
 
@@ -39,8 +39,6 @@ jobs:
         run: |
           VERSION="${{ github.event.inputs.version || github.ref_name }}"
           echo "toTag=$VERSION" >> "$GITHUB_OUTPUT"
-          # Tags are sorted in descending version order (newest first).
-          # Walk the list and pick the tag immediately before the current one.
           prev=""
           while IFS= read -r tag; do
             if [ "$tag" = "$VERSION" ]; then
@@ -50,8 +48,6 @@ jobs:
             fi
             prev="$tag"
           done < <(git tag --sort=-version:refname)
-          # If VERSION is the newest tag, $prev stays empty — the action will
-          # build a changelog from the beginning of the repo.
 
       - name: Build Changelog/Release Notes
         id: github_release
@@ -94,22 +90,18 @@ jobs:
           FROM_TAG="${{ steps.version_range.outputs.fromTag }}"
           VERSION_FILE="docs/${VERSION}.md"
           
-          # 1. If the action returned an empty / "No changes" changelog, generate
-          #    a fallback from git log so the doc file is never blank.
           FALLBACK=false
           TRIMMED=$(printf '%s' "$CHANGELOG" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
           if [ -z "$TRIMMED" ] || [ "$TRIMMED" = "- No changes" ]; then
             FALLBACK=true
-            echo "[!] Changelog from action was empty — generating fallback from git log between ${FROM_TAG:-<beginning>}..${VERSION}"
+            echo "[!] Empty changelog — using git log fallback"
           fi
           
-          # 2. Create the standalone version document right in the root of docs/
           echo "# KDM CLI Documentation - ${VERSION}" > "$VERSION_FILE"
           echo "Published on: $(date +'%Y-%m-%d')" >> "$VERSION_FILE"
           echo "" >> "$VERSION_FILE"
           
           if [ "$FALLBACK" = "true" ]; then
-            # Build a markdown changelog from commits, filtering out noise
             {
               echo "### 📦 Commits"
               echo ""
@@ -126,13 +118,11 @@ jobs:
             printf '%s\n' "$CHANGELOG" >> "$VERSION_FILE"
           fi
           
-          # 2. Build the new dynamic landing page in a temporary file
           TEMP_README=$(mktemp)
           
           echo "# Documentation (Latest: ${VERSION})" > "$TEMP_README"
           echo "" >> "$TEMP_README"
           
-          # 3. Embed the raw content of the new version directly into the README
           cat "$VERSION_FILE" >> "$TEMP_README"
           
           echo "" >> "$TEMP_README"
@@ -140,22 +130,16 @@ jobs:
           echo "## Version History" >> "$TEMP_README"
           echo "" >> "$TEMP_README"
           
-          # 4. Safely extract, sort, and process all version documentation files
-          # shopt -s nullglob ensures an unmatched glob pattern expands to nothing rather than its literal string
           shopt -s nullglob
           
-          # Ingest all docs/*.md files, filter out README.md, version-sort in reverse chronological order
           mapfile -t version_files < <(printf '%s\n' docs/*.md | grep -v -E '^docs/(README|what-is-kdm|UPGRADE-v2)\.md$' | sort -V -r)
           
-          # 5. Loop through the array buffer safely without breaking on empty sets or spaces
           for file in "${version_files[@]}"; do
-            # Double check the file exists to catch empty arrays securely
             [ -f "$file" ] || continue
             V_NAME=$(basename "$file" .md)
             echo "* [$V_NAME]($V_NAME.md)" >> "$TEMP_README"
           done
           
-          # 6. Overwrite the main docs/README.md with our cleanly compiled template
           mv "$TEMP_README" docs/README.md
 
       - name: Commit and Push Changes
@@ -165,21 +149,15 @@ jobs:
           
           git checkout ${{ github.event.repository.default_branch }}
           
-          # Retry fast-forward pull up to 3 times with exponential backoff
-          max_attempts=3
-          attempt=1
-          while [ $attempt -le $max_attempts ]; do
+          for i in 1 2 3; do
             if git pull origin ${{ github.event.repository.default_branch }} --ff-only; then
               break
             fi
-            if [ $attempt -eq $max_attempts ]; then
-              echo "ERROR: Failed to fast-forward after $max_attempts attempts"
-              echo "Manual intervention required - docs/ has conflicts"
+            if [ $i -eq 3 ]; then
+              echo "ERROR: Failed to fast-forward after 3 attempts"
               exit 1
             fi
-            echo "Fast-forward failed (attempt $attempt/$max_attempts), retrying in $((2**attempt))s..."
-            sleep $((2**attempt))
-            ((attempt++))
+            sleep $((2**i))
           done
           
           git add docs/
