@@ -339,7 +339,7 @@ assert('refactor PR: cli module', labels3.includes('module: cli'));
 assert('refactor PR: test module', labels3.includes('module: test'));
 assert('refactor PR: multi-module flagged', labels3.includes('multi-module'));
 assert('refactor PR: review: complex present', labels3.includes('review: complex'));
-console.log(`    Labels: ${labels2.join(', ')}`);
+console.log(`    Labels: ${labels3.join(', ')}`);
 
 // Scenario 4: PR with no detectable type
 const labels4 = simulateLabels('Update README', ['docs/README.md'], 15, 5);
