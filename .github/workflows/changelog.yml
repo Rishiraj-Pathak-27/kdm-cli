@@ -35,11 +35,31 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.repository.default_branch }}
 
+      - name: Determine version range
+        id: version_range
+        run: |
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          echo "toTag=$VERSION" >> "$GITHUB_OUTPUT"
+          # Tags are sorted in descending version order (newest first).
+          # Walk the list and pick the tag immediately before the current one.
+          prev=""
+          while IFS= read -r tag; do
+            if [ "$tag" = "$VERSION" ]; then
+              echo "fromTag=$prev" >> "$GITHUB_OUTPUT"
+              echo "previous_tag=$prev" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            prev="$tag"
+          done < <(git tag --sort=-version:refname)
+          # If VERSION is the newest tag, $prev stays empty — the action will
+          # build a changelog from the beginning of the repo.
+
       - name: Build Changelog/Release Notes
         id: github_release
         uses: mikepenz/release-changelog-builder-action@348e88fab4c37338b1e803ceb2d4a7a5db6c0833 # v6.2.2
         with:
-          toTag: ${{ github.event.inputs.version || github.ref_name }}
+          fromTag: ${{ steps.version_range.outputs.fromTag }}
+          toTag: ${{ steps.version_range.outputs.toTag }}
           configurationJson: |
             {
               "categories": [
@@ -51,7 +71,7 @@ jobs:
               ],
               "label_extractor": [
                 {
-                  "pattern": "^(feat|fix|docs|doc|perf|refactor|chore|ci|build|test|style|revert)(?:\\([\\w\\-\\.]+\\))?(!)?:",
+                  "pattern": "^(?i)(feat|feature|fix|docs?|perf|refactor|chore|ci|build|test|style|revert)(?:\\([\\w\\-\\.]+\\))?(!)?:",
                   "on_property": "title",
                   "target": "$1"
                 }
@@ -71,14 +91,41 @@ jobs:
         env:
           CHANGELOG: ${{ steps.github_release.outputs.changelog }}
         run: |
-          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          VERSION="${{ steps.version_range.outputs.toTag }}"
+          FROM_TAG="${{ steps.version_range.outputs.fromTag }}"
           VERSION_FILE="docs/${VERSION}.md"
           
-          # 1. Create the standalone version document right in the root of docs/
+          # 1. If the action returned an empty / "No changes" changelog, generate
+          #    a fallback from git log so the doc file is never blank.
+          FALLBACK=false
+          TRIMMED=$(printf '%s' "$CHANGELOG" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          if [ -z "$TRIMMED" ] || [ "$TRIMMED" = "- No changes" ]; then
+            FALLBACK=true
+            echo "[!] Changelog from action was empty — generating fallback from git log between ${FROM_TAG:-<beginning>}..${VERSION}"
+          fi
+          
+          # 2. Create the standalone version document right in the root of docs/
           echo "# KDM CLI Documentation - ${VERSION}" > "$VERSION_FILE"
           echo "Published on: $(date +'%Y-%m-%d')" >> "$VERSION_FILE"
           echo "" >> "$VERSION_FILE"
-          printf '%s\n' "$CHANGELOG" >> "$VERSION_FILE"
+          
+          if [ "$FALLBACK" = "true" ]; then
+            # Build a markdown changelog from commits, filtering out noise
+            {
+              echo "### 📦 Commits"
+              echo ""
+              if [ -n "$FROM_TAG" ]; then
+                git log --oneline --no-merges "${FROM_TAG}..${VERSION}"
+              else
+                git log --oneline --no-merges "${VERSION}"
+              fi | grep -vi "auto-scaffold flat documentation" | grep -vi "skip ci" | while IFS= read -r line; do
+                msg="${line#* }"
+                echo "- ${msg}"
+              done
+            } >> "$VERSION_FILE"
+          else
+            printf '%s\n' "$CHANGELOG" >> "$VERSION_FILE"
+          fi
           
           # 2. Build the new dynamic landing page in a temporary file
           TEMP_README=$(mktemp)
@@ -144,5 +191,5 @@ jobs:
             exit 0
           fi
           
-          git commit -m "docs: auto-scaffold flat documentation for ${{ github.event.inputs.version || github.ref_name }} [skip ci]"
+          git commit -m "docs: auto-scaffold flat documentation for ${{ steps.version_range.outputs.toTag }} [skip ci]"
           git push origin HEAD:${{ github.event.repository.default_branch }}
