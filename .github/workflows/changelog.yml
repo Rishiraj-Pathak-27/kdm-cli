@@ -5,14 +5,14 @@ on:
     types: [published]
   push:
     tags:
-      - 'v*.*.*'      # Matches v1.0.0, v2.14.2, etc.
-      - '*.*.*'       # Matches 1.0.0 (no v prefix)
-      - 'v*.*.*-*'    # Matches v1.0.1-alpha.1, v1.2.0-beta.3, v2.0.0-rc.1
-      - '*.*.*-*'     # Matches 1.0.1-alpha.1 (no v prefix)
+      - 'v*.*.*'
+      - '*.*.*'
+      - 'v*.*.*-*'
+      - '*.*.*-*'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to generate changelog/docs for (e.g., v1.2.5)'
+        description: 'Version to generate docs for (e.g., v1.2.5)'
         required: true
         type: string
 
@@ -31,15 +31,30 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v6
         with:
-          token: ${{ secrets.GH_PAT }}
           fetch-depth: 0
           ref: ${{ github.event.repository.default_branch }}
+
+      - name: Determine version range
+        id: version_range
+        run: |
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          echo "toTag=$VERSION" >> "$GITHUB_OUTPUT"
+          prev=""
+          while IFS= read -r tag; do
+            if [ "$tag" = "$VERSION" ]; then
+              echo "fromTag=$prev" >> "$GITHUB_OUTPUT"
+              echo "previous_tag=$prev" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            prev="$tag"
+          done < <(git tag --sort=-version:refname)
 
       - name: Build Changelog/Release Notes
         id: github_release
         uses: mikepenz/release-changelog-builder-action@348e88fab4c37338b1e803ceb2d4a7a5db6c0833 # v6.2.2
         with:
-          toTag: ${{ github.event.inputs.version || github.ref_name }}
+          fromTag: ${{ steps.version_range.outputs.fromTag }}
+          toTag: ${{ steps.version_range.outputs.toTag }}
           configurationJson: |
             {
               "categories": [
@@ -51,7 +66,7 @@ jobs:
               ],
               "label_extractor": [
                 {
-                  "pattern": "^(feat|fix|docs|doc|perf|refactor|chore|ci|build|test|style|revert)(?:\\([\\w\\-\\.]+\\))?(!)?:",
+                  "pattern": "^(?i)(feat|feature|fix|docs?|perf|refactor|chore|ci|build|test|style|revert)(?:\\([\\w\\-\\.]+\\))?(!)?:",
                   "on_property": "title",
                   "target": "$1"
                 }
@@ -71,22 +86,43 @@ jobs:
         env:
           CHANGELOG: ${{ steps.github_release.outputs.changelog }}
         run: |
-          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          VERSION="${{ steps.version_range.outputs.toTag }}"
+          FROM_TAG="${{ steps.version_range.outputs.fromTag }}"
           VERSION_FILE="docs/${VERSION}.md"
           
-          # 1. Create the standalone version document right in the root of docs/
+          FALLBACK=false
+          TRIMMED=$(printf '%s' "$CHANGELOG" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          if [ -z "$TRIMMED" ] || [ "$TRIMMED" = "- No changes" ]; then
+            FALLBACK=true
+            echo "[!] Empty changelog — using git log fallback"
+          fi
+          
           echo "# KDM CLI Documentation - ${VERSION}" > "$VERSION_FILE"
           echo "Published on: $(date +'%Y-%m-%d')" >> "$VERSION_FILE"
           echo "" >> "$VERSION_FILE"
-          printf '%s\n' "$CHANGELOG" >> "$VERSION_FILE"
           
-          # 2. Build the new dynamic landing page in a temporary file
+          if [ "$FALLBACK" = "true" ]; then
+            {
+              echo "### 📦 Commits"
+              echo ""
+              if [ -n "$FROM_TAG" ]; then
+                git log --oneline --no-merges "${FROM_TAG}..${VERSION}"
+              else
+                git log --oneline --no-merges "${VERSION}"
+              fi | grep -vi "auto-scaffold flat documentation" | grep -vi "skip ci" | while IFS= read -r line; do
+                msg="${line#* }"
+                echo "- ${msg}"
+              done
+            } >> "$VERSION_FILE"
+          else
+            printf '%s\n' "$CHANGELOG" >> "$VERSION_FILE"
+          fi
+          
           TEMP_README=$(mktemp)
           
           echo "# Documentation (Latest: ${VERSION})" > "$TEMP_README"
           echo "" >> "$TEMP_README"
           
-          # 3. Embed the raw content of the new version directly into the README
           cat "$VERSION_FILE" >> "$TEMP_README"
           
           echo "" >> "$TEMP_README"
@@ -94,22 +130,16 @@ jobs:
           echo "## Version History" >> "$TEMP_README"
           echo "" >> "$TEMP_README"
           
-          # 4. Safely extract, sort, and process all version documentation files
-          # shopt -s nullglob ensures an unmatched glob pattern expands to nothing rather than its literal string
           shopt -s nullglob
           
-          # Ingest all docs/*.md files, filter out README.md, version-sort in reverse chronological order
-          mapfile -t version_files < <(printf '%s\n' docs/*.md | grep -v '^docs/README\.md$' | sort -V -r)
+          mapfile -t version_files < <(printf '%s\n' docs/*.md | grep -v -E '^docs/(README|what-is-kdm|UPGRADE-v2)\.md$' | sort -V -r)
           
-          # 5. Loop through the array buffer safely without breaking on empty sets or spaces
           for file in "${version_files[@]}"; do
-            # Double check the file exists to catch empty arrays securely
             [ -f "$file" ] || continue
             V_NAME=$(basename "$file" .md)
             echo "* [$V_NAME]($V_NAME.md)" >> "$TEMP_README"
           done
           
-          # 6. Overwrite the main docs/README.md with our cleanly compiled template
           mv "$TEMP_README" docs/README.md
 
       - name: Commit and Push Changes
@@ -118,23 +148,16 @@ jobs:
           git config --local user.name "github-actions[bot]"
           
           git checkout ${{ github.event.repository.default_branch }}
-          git checkout ${{ github.event.repository.default_branch }}
           
-          # Retry fast-forward pull up to 3 times with exponential backoff
-          max_attempts=3
-          attempt=1
-          while [ $attempt -le $max_attempts ]; do
+          for i in 1 2 3; do
             if git pull origin ${{ github.event.repository.default_branch }} --ff-only; then
               break
             fi
-            if [ $attempt -eq $max_attempts ]; then
-              echo "ERROR: Failed to fast-forward after $max_attempts attempts"
-              echo "Manual intervention required - docs/ has conflicts"
+            if [ $i -eq 3 ]; then
+              echo "ERROR: Failed to fast-forward after 3 attempts"
               exit 1
             fi
-            echo "Fast-forward failed (attempt $attempt/$max_attempts), retrying in $((2**attempt))s..."
-            sleep $((2**attempt))
-            ((attempt++))
+            sleep $((2**i))
           done
           
           git add docs/
@@ -144,5 +167,5 @@ jobs:
             exit 0
           fi
           
-          git commit -m "docs: auto-scaffold flat documentation for ${{ github.event.inputs.version || github.ref_name }} [skip ci]"
+          git commit -m "docs: auto-scaffold flat documentation for ${{ steps.version_range.outputs.toTag }} [skip ci]"
           git push origin HEAD:${{ github.event.repository.default_branch }}
