@@ -203,9 +203,7 @@ describe('AuthDashboard', () => {
     await waitForFrameToContain(mockStdout, 'Edit AI Provider: OpenAI');
     await sleep(50);
 
-    // Step 1: Model (delete 2 chars, add '-turbo')
-    mockStdin.sendKey('backspace');
-    await sleep(20);
+    // Step 1: Model (delete 1 char, add '-turbo')
     mockStdin.sendKey('backspace');
     await sleep(20);
     mockStdin.sendStr('-turbo');
@@ -223,7 +221,7 @@ describe('AuthDashboard', () => {
     mockStdin.sendKey('return');
     await waitForFrameToContain(mockStdout, 'Successfully updated AI provider "OpenAI"');
 
-    expect(mockStore.providers[0].model).toBe('gpt--turbo');
+    expect(mockStore.providers[0].model).toBe('gpt-4-turbo');
     expect(mockStore.providers[0].password).toBe('new-key');
 
     unmount();
@@ -280,6 +278,49 @@ describe('AuthDashboard', () => {
     await waitForFrameToContain(mockStdout, 'Successfully removed AI provider "OpenAI"');
 
     expect(mockStore.providers).toHaveLength(0);
+
+    unmount();
+    await sleep(50);
+  });
+
+  it('rejects invalid temperature in Add Wizard', async () => {
+    const { unmount } = render(<AuthDashboard />, {
+      stdout: mockStdout as any,
+      stdin: mockStdin as any,
+    });
+
+    await waitForFrameToContain(mockStdout, 'OpenAI');
+
+    // Press A to open Add wizard
+    mockStdin.sendChar('a');
+    await waitForFrameToContain(mockStdout, 'Step 1/4 — Provider:');
+    await sleep(50);
+
+    // Step 1: Provider name -> Enter
+    mockStdin.sendKey('return');
+    await sleep(50);
+
+    // Step 2: Model -> Enter
+    mockStdin.sendKey('return');
+    await sleep(50);
+
+    // Step 3: API Key -> Enter
+    mockStdin.sendStr('secret-key');
+    await sleep(50);
+    mockStdin.sendKey('return');
+    await sleep(50);
+
+    // Step 4: Temp (backspace default 0.7, type invalid "0.7abc")
+    mockStdin.sendKey('backspace'); // delete 7
+    await sleep(20);
+    mockStdin.sendKey('backspace'); // delete .
+    await sleep(20);
+    mockStdin.sendKey('backspace'); // delete 0
+    await sleep(20);
+    mockStdin.sendStr('0.7abc');
+    await sleep(50);
+    mockStdin.sendKey('return');
+    await waitForFrameToContain(mockStdout, 'Temperature must be a valid number.');
 
     unmount();
     await sleep(50);

@@ -54,6 +54,13 @@ const PROVIDER_NAMES: Record<string, string> = {
 
 type Mode = 'list' | 'add' | 'edit' | 'remove-confirm';
 
+const parseTemperature = (value: string): number | null => {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 export const AuthDashboard = () => {
   const [config, setConfig] = useState(() => getAIConfig());
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -196,8 +203,8 @@ export const AuthDashboard = () => {
             return;
           }
 
-          const tempFloat = parseFloat(wizardValues.temp);
-          if (isNaN(tempFloat)) {
+          const tempFloat = parseTemperature(wizardValues.temp);
+          if (tempFloat === null) {
             setErrorMsg('Temperature must be a valid number.');
             return;
           }
@@ -265,8 +272,8 @@ export const AuthDashboard = () => {
           setWizardStep((prev) => prev + 1);
         } else {
           // Submit Edit
-          const tempFloat = parseFloat(wizardValues.temp);
-          if (isNaN(tempFloat)) {
+          const tempFloat = parseTemperature(wizardValues.temp);
+          if (tempFloat === null) {
             setErrorMsg('Temperature must be a valid number.');
             return;
           }
@@ -432,9 +439,11 @@ export const AuthDashboard = () => {
           padding={1}
           marginTop={1}
         >
-          <Text bold color="yellow" marginBottom={1}>
-            ┌─ Add AI Provider ────────────────────────────────────────┐
-          </Text>
+          <Box marginBottom={1}>
+            <Text bold color="yellow">
+              ┌─ Add AI Provider ────────────────────────────────────────┐
+            </Text>
+          </Box>
 
           <Box flexDirection="row">
             <Text color={wizardStep === 0 ? 'cyan' : undefined} bold={wizardStep === 0}>
@@ -465,9 +474,11 @@ export const AuthDashboard = () => {
           </Box>
 
           {errorMsg && (
-            <Text color="red" bold marginBottom={1}>
-              {errorMsg}
-            </Text>
+            <Box marginBottom={1}>
+              <Text color="red" bold>
+                {errorMsg}
+              </Text>
+            </Box>
           )}
 
           <Text dimColor>
@@ -484,9 +495,11 @@ export const AuthDashboard = () => {
           padding={1}
           marginTop={1}
         >
-          <Text bold color="yellow" marginBottom={1}>
-            ┌─ Edit AI Provider: {selectedProviderName} ────────────────┐
-          </Text>
+          <Box marginBottom={1}>
+            <Text bold color="yellow">
+              ┌─ Edit AI Provider: {selectedProviderName} ────────────────┐
+            </Text>
+          </Box>
 
           <Box flexDirection="row">
             <Text color={wizardStep === 0 ? 'cyan' : undefined} bold={wizardStep === 0}>
@@ -514,9 +527,11 @@ export const AuthDashboard = () => {
           </Box>
 
           {errorMsg && (
-            <Text color="red" bold marginBottom={1}>
-              {errorMsg}
-            </Text>
+            <Box marginBottom={1}>
+              <Text color="red" bold>
+                {errorMsg}
+              </Text>
+            </Box>
           )}
 
           <Text dimColor>
@@ -533,9 +548,11 @@ export const AuthDashboard = () => {
           padding={1}
           marginTop={1}
         >
-          <Text bold color="red" marginBottom={1}>
-            Are you sure you want to remove "{selectedProviderName}"?
-          </Text>
+          <Box marginBottom={1}>
+            <Text bold color="red">
+              Are you sure you want to remove "{selectedProviderName}"?
+            </Text>
+          </Box>
           <Text>
             Press <Text bold color="green">[Y]</Text> to confirm, or{' '}
             <Text bold color="red">[N]</Text> (or Esc) to cancel.
