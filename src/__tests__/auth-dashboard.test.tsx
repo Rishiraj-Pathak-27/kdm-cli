@@ -105,6 +105,7 @@ describe('AuthDashboard', () => {
     const { unmount } = render(<AuthDashboard />, {
       stdout: mockStdout as any,
       stdin: mockStdin as any,
+      interactive: true,
     });
 
     await waitForFrameToContain(mockStdout, 'OpenAI');
@@ -123,6 +124,7 @@ describe('AuthDashboard', () => {
     const { unmount } = render(<AuthDashboard />, {
       stdout: mockStdout as any,
       stdin: mockStdin as any,
+      interactive: true,
     });
 
     await waitForFrameToContain(mockStdout, 'OpenAI');
@@ -150,6 +152,7 @@ describe('AuthDashboard', () => {
     const { unmount } = render(<AuthDashboard />, {
       stdout: mockStdout as any,
       stdin: mockStdin as any,
+      interactive: true,
     });
 
     await waitForFrameToContain(mockStdout, 'OpenAI');
@@ -194,6 +197,7 @@ describe('AuthDashboard', () => {
     const { unmount } = render(<AuthDashboard />, {
       stdout: mockStdout as any,
       stdin: mockStdin as any,
+      interactive: true,
     });
 
     await waitForFrameToContain(mockStdout, 'OpenAI');
@@ -238,6 +242,7 @@ describe('AuthDashboard', () => {
     const { unmount } = render(<AuthDashboard />, {
       stdout: mockStdout as any,
       stdin: mockStdin as any,
+      interactive: true,
     });
 
     await waitForFrameToContain(mockStdout, 'Ollama');
@@ -264,6 +269,7 @@ describe('AuthDashboard', () => {
     const { unmount } = render(<AuthDashboard />, {
       stdout: mockStdout as any,
       stdin: mockStdin as any,
+      interactive: true,
     });
 
     await waitForFrameToContain(mockStdout, 'OpenAI');
@@ -287,6 +293,7 @@ describe('AuthDashboard', () => {
     const { unmount } = render(<AuthDashboard />, {
       stdout: mockStdout as any,
       stdin: mockStdin as any,
+      interactive: true,
     });
 
     await waitForFrameToContain(mockStdout, 'OpenAI');
