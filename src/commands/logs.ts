@@ -44,12 +44,8 @@ export const showLogs = async (name: string): Promise<void> => {
       return;
     }
   } catch (error) {
-<<<<<<< Updated upstream
     // ✅ CodeRabbit (Minor): log why Docker failed instead of swallowing silently
     logger.warn?.(
-=======
-    logger.debug?.(
->>>>>>> Stashed changes
       `Docker unavailable, trying Kubernetes: ${
         error instanceof Error ? error.message : String(error)
       }`,
