@@ -5,7 +5,6 @@ import type * as k8s from '@kubernetes/client-node';
 import { logger } from '../utils/logger';
 import { createSpinner } from '../ui/spinner';
 
-// ✅ CodeRabbit (Nitpick): simplified — Buffer and non-Buffer values both
 //    convert correctly with String(), no branch needed
 const printStream = (value: unknown): void =>
   void process.stdout.write(String(value));
@@ -45,8 +44,12 @@ export const showLogs = async (name: string): Promise<void> => {
       return;
     }
   } catch (error) {
+<<<<<<< Updated upstream
     // ✅ CodeRabbit (Minor): log why Docker failed instead of swallowing silently
     logger.warn?.(
+=======
+    logger.debug?.(
+>>>>>>> Stashed changes
       `Docker unavailable, trying Kubernetes: ${
         error instanceof Error ? error.message : String(error)
       }`,

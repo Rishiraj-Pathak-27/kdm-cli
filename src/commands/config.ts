@@ -17,6 +17,11 @@ const readlineInput = (question: string): Promise<string> => {
       output: process.stdout,
       terminal: true,
     });
+    // Resolve with empty string on EOF (Ctrl+D) so the caller's
+    // while-loop can detect it and throw instead of hanging forever.
+    rl.on('close', () => {
+      resolve('');
+    });
     rl.question(question, (answer) => {
       rl.close();
       resolve(answer.trim());
@@ -68,6 +73,9 @@ const handleDiscordSetup = async () => {
   let webhook = '';
   while (true) {
     webhook = await readlineInput(question);
+    if (!webhook) {
+      throw new Error('Setup cancelled: no input received (EOF).');
+    }
     if (discordWebhookRegex.test(webhook)) break;
     console.log(chalk.red('  ✖ Must be a valid Discord webhook URL (including ID and Token)'));
   }
